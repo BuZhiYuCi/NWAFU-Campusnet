@@ -62,6 +62,7 @@ Write-Output ("using interpreter: " + $pyExe + " " + ($pyPre -join " "))
 
 $icon = "assets\campusnet.ico"
 $data = "src\campusnet\data\error_codes.json;campusnet\data"
+$assets = "assets;assets"
 
 Write-Output "== 1/3 generating icon =="
 & $pyExe @pyPre tools\make_icon.py
@@ -72,6 +73,7 @@ Write-Output "== 2/3 building GUI (windowed) =="
     --icon $icon `
     --paths src `
     --add-data $data `
+    --add-data $assets `
     --exclude-module pytest `
     run_gui.pyw
 
@@ -81,6 +83,7 @@ Write-Output "== 3/3 building CLI (console) =="
     --icon $icon `
     --paths src `
     --add-data $data `
+    --add-data $assets `
     --exclude-module pytest `
     run_cli.py
 

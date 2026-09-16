@@ -21,6 +21,7 @@ from ..models import (NOT_ONLINE, STATE_OFFLINE, STATE_ONLINE, STATE_UNKNOWN,
 from ..portal import PortalError, PortalUnreachable, SrunPortalClient
 from ..service import CampusNetService, Outcome
 from . import theme
+from .widgets import RoundedButton
 from .tray import TrayIcon
 
 FONT = "Microsoft YaHei UI"
@@ -117,9 +118,17 @@ class App(object):
 
         self.root = tk.Tk()
         self.root.title("校园网助手")
-        self.root.geometry("760x560")
-        self.root.minsize(680, 480)
+        self.root.geometry("820x600")
+        self.root.minsize(720, 520)
         self.root.configure(bg=theme.BG)
+        theme.apply_style(self.root)
+        window_icon = theme.load_image("emblem-ui.png", master=self.root)
+        if window_icon:
+            self._window_icon = window_icon      # 必须留引用，否则会被回收
+            try:
+                self.root.iconphoto(True, window_icon)
+            except Exception:
+                pass
         self.runner = TaskRunner(self.root, logger)
 
         self._build_ui()
@@ -142,69 +151,106 @@ class App(object):
     # 界面搭建
     # ------------------------------------------------------------------
     def _build_ui(self):
-        header = tk.Frame(self.root, bg=theme.CARD, padx=18, pady=14)
-        header.pack(fill=tk.X)
+        # ---- 顶部状态卡：徽标 + 状态灯 + 大字状态 + 明细 ----
+        header = tk.Frame(self.root, bg=theme.CARD)
+        header.pack(fill=tk.X, padx=12, pady=(12, 6))
+        inner = tk.Frame(header, bg=theme.CARD)
+        inner.pack(fill=tk.X, padx=18, pady=16)
 
-        self.dot = tk.Canvas(header, width=16, height=16, bg=theme.CARD,
+        emblem = theme.load_image("emblem-ui.png", master=self.root)
+        if emblem:
+            self._emblem_img = emblem
+            if emblem.width() > 64:                 # 96px 源图缩到 48px
+                emblem = emblem.subsample(2, 2)
+                self._emblem_img_small = emblem
+            tk.Label(inner, image=emblem, bg=theme.CARD).grid(
+                row=0, column=0, rowspan=2, padx=(0, 16))
+
+        self.dot = tk.Canvas(inner, width=14, height=14, bg=theme.CARD,
                              highlightthickness=0)
-        self.dot.grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, 10))
-        self._dot_id = self.dot.create_oval(2, 2, 15, 15,
+        self.dot.grid(row=0, column=1, sticky="w", padx=(0, 8))
+        self._dot_id = self.dot.create_oval(1, 1, 13, 13,
                                             fill=theme.color_for(STATE_UNKNOWN),
                                             outline="")
-
-        self.state_label = tk.Label(header, text="正在检测…", bg=theme.CARD,
-                                    fg=theme.TEXT, font=(FONT, 15, "bold"))
-        self.state_label.grid(row=0, column=1, sticky="w")
-        self.detail_label = tk.Label(header, text="", bg=theme.CARD,
-                                     fg=theme.MUTED, font=(FONT, 9),
+        self.state_label = tk.Label(inner, text="正在检测…", bg=theme.CARD,
+                                    fg=theme.TEXT, font=theme.FONT_TITLE)
+        self.state_label.grid(row=0, column=2, sticky="w")
+        self.detail_label = tk.Label(inner, text="", bg=theme.CARD,
+                                     fg=theme.MUTED, font=theme.FONT_SMALL,
                                      justify=tk.LEFT)
-        self.detail_label.grid(row=1, column=1, sticky="w", pady=(2, 0))
-        header.columnconfigure(1, weight=1)
+        self.detail_label.grid(row=1, column=1, columnspan=2, sticky="w",
+                               pady=(4, 0))
+        inner.columnconfigure(2, weight=1)
 
-        bar = tk.Frame(self.root, bg=theme.BG, padx=16, pady=10)
-        bar.pack(fill=tk.X)
-        self.btn_login = ttk.Button(bar, text="一键登录", command=self.action_login)
+        # ---- 操作按钮 ----
+        bar = tk.Frame(self.root, bg=theme.BG)
+        bar.pack(fill=tk.X, padx=16, pady=(6, 10))
+        self.btn_login = RoundedButton(bar, text="一键登录", style="accent",
+                                       command=self.action_login, height=36,
+                                       font=theme.FONT_BUTTON_BOLD)
         self.btn_login.pack(side=tk.LEFT)
-        self.btn_logout = ttk.Button(bar, text="一键下线", command=self.action_logout)
-        self.btn_logout.pack(side=tk.LEFT, padx=8)
-        self.btn_refresh = ttk.Button(bar, text="刷新", command=self.refresh)
+        self.btn_logout = RoundedButton(bar, text="一键下线", style="soft",
+                                        command=self.action_logout, height=36,
+                                        font=theme.FONT_BUTTON)
+        self.btn_logout.pack(side=tk.LEFT, padx=10)
+        self.btn_refresh = RoundedButton(bar, text="刷新", style="ghost",
+                                         command=self.refresh, height=36,
+                                         font=theme.FONT_BUTTON)
         self.btn_refresh.pack(side=tk.LEFT)
-        ttk.Button(bar, text="设置", command=self.open_settings).pack(side=tk.RIGHT)
+        RoundedButton(bar, text="设置", style="ghost",
+                      command=self.open_settings, height=36,
+                      font=theme.FONT_BUTTON).pack(side=tk.RIGHT)
 
-        box = tk.LabelFrame(self.root, text=" 在线设备 ", bg=theme.BG,
-                            fg=theme.TEXT, font=(FONT, 10), padx=10, pady=8)
-        box.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 8))
+        # ---- 在线设备 ----
+        card = tk.Frame(self.root, bg=theme.CARD)
+        card.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 6))
+
+        head = tk.Frame(card, bg=theme.CARD)
+        head.pack(fill=tk.X, padx=18, pady=(12, 6))
+        self.section_label = tk.Label(head, text="在线设备", bg=theme.CARD,
+                                      fg=theme.PRIMARY_DARK,
+                                      font=theme.FONT_SECTION)
+        self.section_label.pack(side=tk.LEFT)
+        self.hint_label = tk.Label(head, text="点击行最左侧勾选", bg=theme.CARD,
+                                   fg=theme.MUTED, font=theme.FONT_SMALL)
+        self.hint_label.pack(side=tk.LEFT, padx=12)
 
         columns = ("check", "type", "os", "since", "online", "ip")
-        self.tree = ttk.Treeview(box, columns=columns, show="headings",
+        self.tree = ttk.Treeview(card, columns=columns, show="headings",
                                  selectmode="none", height=8)
         headings = {"check": "", "type": "设备类型", "os": "操作系统",
                     "since": "上线时间", "online": "已在线", "ip": "IP 地址"}
-        widths = {"check": 34, "type": 90, "os": 110, "since": 160,
-                  "online": 100, "ip": 160}
+        widths = {"check": 38, "type": 96, "os": 120, "since": 170,
+                  "online": 106, "ip": 170}
         for col in columns:
             self.tree.heading(col, text=headings[col])
             self.tree.column(col, width=widths[col],
-                             anchor="center" if col == "check" else "w",
+                             anchor="center" if col in ("check", "online") else "w",
                              stretch=(col == "os"))
-        self.tree.tag_configure("local", background="#eef4ff")
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        self.tree.tag_configure("odd", background=theme.CARD)
+        self.tree.tag_configure("even", background=theme.CARD_SOFT)
+        self.tree.tag_configure("local", background=theme.PRIMARY_TINT)
+        self.tree.pack(fill=tk.BOTH, expand=True, padx=12)
         self.tree.bind("<Button-1>", self._on_tree_click)
 
-        ops = tk.Frame(box, bg=theme.BG)
-        ops.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(ops, text="全选", command=self._check_all).pack(side=tk.LEFT)
-        ttk.Button(ops, text="全不选", command=self._check_none).pack(side=tk.LEFT, padx=6)
-        self.btn_kick = ttk.Button(ops, text="下线选中设备",
-                                   command=self.action_kick_selected)
-        self.btn_kick.pack(side=tk.LEFT, padx=6)
-        self.hint_label = tk.Label(ops, text="点击行最左侧勾选", bg=theme.BG,
-                                   fg=theme.MUTED, font=(FONT, 9))
-        self.hint_label.pack(side=tk.LEFT, padx=10)
+        ops = tk.Frame(card, bg=theme.CARD)
+        ops.pack(fill=tk.X, padx=18, pady=12)
+        RoundedButton(ops, text="全选", style="soft", height=30,
+                      parent_bg=theme.CARD, font=theme.FONT_BUTTON_SMALL,
+                      command=self._check_all).pack(side=tk.LEFT)
+        RoundedButton(ops, text="全不选", style="soft", height=30,
+                      parent_bg=theme.CARD, font=theme.FONT_BUTTON_SMALL,
+                      command=self._check_none).pack(side=tk.LEFT, padx=8)
+        self.btn_kick = RoundedButton(ops, text="下线选中设备", style="soft",
+                                      height=30, parent_bg=theme.CARD,
+                                      font=theme.FONT_BUTTON_SMALL,
+                                      command=self.action_kick_selected)
+        self.btn_kick.pack(side=tk.LEFT)
 
+        # ---- 状态栏 ----
         self.status_bar = tk.Label(self.root, text="就绪", anchor="w",
-                                   bg="#eceff3", fg=theme.MUTED,
-                                   font=(FONT, 9), padx=14, pady=6)
+                                   bg=theme.PRIMARY_SOFT, fg=theme.PRIMARY_DARK,
+                                   font=theme.FONT_SMALL, padx=16, pady=7)
         self.status_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
     # ------------------------------------------------------------------
@@ -242,17 +288,19 @@ class App(object):
     # ------------------------------------------------------------------
     def _render_devices(self):
         self.tree.delete(*self.tree.get_children())
-        for dev in policy.sort_oldest_first(self.devices):
+        for index, dev in enumerate(policy.sort_oldest_first(self.devices)):
             checked = "☑" if dev.ip in self.checked else "☐"
-            tags = ("local",) if self.my_ip and dev.ip == self.my_ip else ()
+            if self.my_ip and dev.ip == self.my_ip:
+                tags = ("local",)
+            else:
+                tags = ("even",) if index % 2 else ("odd",)
             suffix = "  ← 本机" if self.my_ip and dev.ip == self.my_ip else ""
             self.tree.insert("", tk.END, iid=dev.ip, tags=tags, values=(
                 checked, dev.client_type_label, dev.os_name, dev.add_time,
                 dev.online_text(), dev.ip + suffix))
-        local = sum(1 for d in self.devices if d.ip == self.my_ip)
-        self.hint_label.configure(
-            text="共 %d 台在线%s" % (len(self.devices),
-                                    "，含本机" if local else ""))
+        self.section_label.configure(
+            text="在线设备（%d）" % len(self.devices))
+        self.hint_label.configure(text="点击行最左侧勾选")
 
     def _on_tree_click(self, event):
         if self.tree.identify_region(event.x, event.y) != "cell":
@@ -465,17 +513,20 @@ class App(object):
         win.configure(bg=theme.BG)
         win.transient(self.root)
         win.grab_set()
-        win.geometry("620x420")
+        win.geometry("660x460")
 
-        tk.Label(win, text="需要先下线一台设备才能登录。", bg=theme.BG,
-                 fg=theme.TEXT, font=(FONT, 12, "bold")).pack(anchor="w",
-                                                              padx=16, pady=(14, 2))
-        tk.Label(win, text="策略：%s（带 ☑ 的是预选，可自行改选）" % self.cfg.kick_mode,
-                 bg=theme.BG, fg=theme.MUTED, font=(FONT, 9)).pack(anchor="w",
-                                                                    padx=16)
+        card = tk.Frame(win, bg=theme.CARD)
+        card.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+        head = tk.Frame(card, bg=theme.CARD)
+        head.pack(fill=tk.X, padx=18, pady=(16, 4))
+        tk.Label(head, text="需要先下线一台设备才能登录", bg=theme.CARD,
+                 fg=theme.TEXT, font=theme.FONT_SECTION).pack(anchor="w")
+        tk.Label(head, text="策略：%s　带 ☑ 的是预选，可自行改选"
+                 % self.cfg.kick_mode, bg=theme.CARD, fg=theme.MUTED,
+                 font=theme.FONT_SMALL).pack(anchor="w", pady=(3, 0))
 
-        frame = tk.Frame(win, bg=theme.BG)
-        frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=10)
+        frame = tk.Frame(card, bg=theme.CARD)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=8)
         cols = ("check", "type", "os", "since", "online", "ip")
         tree = ttk.Treeview(frame, columns=cols, show="headings",
                             selectmode="none", height=8)
@@ -487,16 +538,21 @@ class App(object):
             tree.heading(col, text=heads[col])
             tree.column(col, width=widths[col],
                         anchor="center" if col == "check" else "w")
-        tree.tag_configure("local", background="#eef4ff")
+        tree.tag_configure("odd", background=theme.CARD)
+        tree.tag_configure("even", background=theme.CARD_SOFT)
+        tree.tag_configure("local", background=theme.PRIMARY_TINT)
         tree.pack(fill=tk.BOTH, expand=True)
 
         checked = {d.ip for d in preselected}
 
         def render():
             tree.delete(*tree.get_children())
-            for dev in policy.sort_oldest_first(devices):
+            for index, dev in enumerate(policy.sort_oldest_first(devices)):
                 mark = "☑" if dev.ip in checked else "☐"
-                tags = ("local",) if my_ip and dev.ip == my_ip else ()
+                if my_ip and dev.ip == my_ip:
+                    tags = ("local",)
+                else:
+                    tags = ("even",) if index % 2 else ("odd",)
                 tree.insert("", tk.END, iid=dev.ip, tags=tags, values=(
                     mark, dev.client_type_label, dev.os_name, dev.add_time,
                     dev.online_text(), dev.ip))
@@ -517,8 +573,10 @@ class App(object):
         render()
 
         result = {"ips": None}
-        row = tk.Frame(win, bg=theme.BG)
-        row.pack(fill=tk.X, padx=16, pady=(0, 14))
+        footer = tk.Frame(card, bg=theme.PRIMARY_TINT)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
+        row = tk.Frame(footer, bg=theme.PRIMARY_TINT)
+        row.pack(fill=tk.X, padx=16, pady=12)
 
         def confirm():
             if not checked:
@@ -528,8 +586,13 @@ class App(object):
             result["ips"] = sorted(checked)
             win.destroy()
 
-        ttk.Button(row, text="下线并继续登录", command=confirm).pack(side=tk.LEFT)
-        ttk.Button(row, text="取消", command=win.destroy).pack(side=tk.LEFT, padx=8)
+        RoundedButton(row, text="取消", style="soft", height=36,
+                      parent_bg=theme.PRIMARY_TINT, font=theme.FONT_BUTTON,
+                      command=win.destroy).pack(side=tk.RIGHT)
+        RoundedButton(row, text="下线并继续登录", style="accent", height=36,
+                      parent_bg=theme.PRIMARY_TINT,
+                      font=theme.FONT_BUTTON_BOLD,
+                      command=confirm).pack(side=tk.RIGHT, padx=10)
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.wait_window()
         return result["ips"]
@@ -610,42 +673,60 @@ class SettingsDialog(object):
         self.win.wait_window()
 
     def _row(self, parent, index, label):
-        tk.Label(parent, text=label, bg=theme.BG, fg=theme.TEXT,
-                 font=(FONT, 9)).grid(row=index, column=0, sticky="w",
-                                      padx=(16, 8), pady=6)
+        tk.Label(parent, text=label, bg=theme.CARD, fg=theme.MUTED,
+                 font=theme.FONT_SMALL).grid(row=index, column=0, sticky="w",
+                                      padx=(20, 10), pady=7)
         return index + 1
 
     def _build(self, first_run):
-        body = tk.Frame(self.win, bg=theme.BG)
-        body.pack(fill=tk.BOTH, expand=True)
+        shell = tk.Frame(self.win, bg=theme.BG)
+        shell.pack(fill=tk.BOTH, expand=True)
+        card = tk.Frame(shell, bg=theme.CARD)
+        card.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+        body = card
         r = 0
         if first_run:
-            tk.Label(body, text="第一次使用，请先设置校园网账号",
-                     bg=theme.BG, fg=theme.TEXT,
-                     font=(FONT, 12, "bold")).grid(row=r, column=0, columnspan=2,
-                                                   sticky="w", padx=16, pady=(14, 4))
+            head = tk.Frame(body, bg=theme.CARD)
+            head.grid(row=r, column=0, columnspan=3, sticky="w",
+                      padx=20, pady=(18, 2))
+            emblem = theme.load_image("emblem-ui.png", master=self.win)
+            if emblem:
+                self._emblem_img = emblem
+                if emblem.width() > 64:
+                    emblem = emblem.subsample(2, 2)
+                    self._emblem_img_small = emblem
+                tk.Label(head, image=emblem, bg=theme.CARD).pack(side=tk.LEFT,
+                                                                 padx=(0, 12))
+            title = tk.Frame(head, bg=theme.CARD)
+            title.pack(side=tk.LEFT)
+            tk.Label(title, text="欢迎使用校园网助手", bg=theme.CARD,
+                     fg=theme.TEXT, font=theme.FONT_SECTION).pack(anchor="w")
+            tk.Label(title, text="第一次使用，先填一下校园网账号",
+                     bg=theme.CARD, fg=theme.MUTED,
+                     font=theme.FONT_SMALL).pack(anchor="w", pady=(2, 0))
             r += 1
             tk.Label(body, text="密码会用 Windows DPAPI 加密保存在本机，只有你本人能解开。",
-                     bg=theme.BG, fg=theme.MUTED, font=(FONT, 9),
-                     wraplength=420, justify=tk.LEFT).grid(
-                         row=r, column=0, columnspan=2, sticky="w", padx=16)
+                     bg=theme.CARD, fg=theme.MUTED, font=theme.FONT_SMALL,
+                     wraplength=460, justify=tk.LEFT).grid(
+                         row=r, column=0, columnspan=3, sticky="w",
+                         padx=20, pady=(0, 6))
             r += 1
 
         r = self._row(body, r, "账号")
         self.var_user = tk.StringVar(value=self.cfg.username)
-        self.entry_user = tk.Entry(body, textvariable=self.var_user, width=32,
-                                   font=(FONT, 10))
+        self.entry_user = ttk.Entry(body, textvariable=self.var_user, width=30,
+                                    font=theme.FONT_BODY)
         self.entry_user.grid(row=r - 1, column=1, sticky="w", pady=6)
 
         r = self._row(body, r, "密码")
         self.var_pwd = tk.StringVar()
-        self.entry_pwd = tk.Entry(body, textvariable=self.var_pwd, width=32,
-                                  show="●", font=(FONT, 10))
+        self.entry_pwd = ttk.Entry(body, textvariable=self.var_pwd, width=30,
+                                   show="●", font=theme.FONT_BODY)
         self.entry_pwd.grid(row=r - 1, column=1, sticky="w", pady=6)
         tk.Label(body, text="留空表示不修改（已保存：%s）"
                  % ("是" if self.cfg.get_password() else "否"),
-                 bg=theme.BG, fg=theme.MUTED, font=(FONT, 8)).grid(
-                     row=r - 1, column=2, sticky="w", padx=6)
+                 bg=theme.CARD, fg=theme.MUTED, font=theme.FONT_SMALL).grid(
+                     row=r - 1, column=2, sticky="w", padx=(10, 20))
 
         r = self._row(body, r, "满员时预选")
         self.var_mode = tk.StringVar(value=self.cfg.kick_mode)
@@ -659,16 +740,16 @@ class SettingsDialog(object):
         ttk.Combobox(body, textvariable=self.var_method, width=28, state="readonly",
                      values=("dm", "portal")).grid(row=r - 1, column=1, sticky="w")
         tk.Label(body, text="dm＝真正下线（推荐）；portal＝只注销会话",
-                 bg=theme.BG, fg=theme.MUTED, font=(FONT, 8)).grid(
-                     row=r - 1, column=2, sticky="w", padx=6)
+                 bg=theme.CARD, fg=theme.MUTED, font=theme.FONT_SMALL).grid(
+                     row=r - 1, column=2, sticky="w", padx=(10, 20))
 
         r = self._row(body, r, "门户地址")
         self.var_base = tk.StringVar(value=self.cfg.base_url)
-        tk.Entry(body, textvariable=self.var_base, width=32,
-                 font=(FONT, 10)).grid(row=r - 1, column=1, sticky="w", pady=6)
+        ttk.Entry(body, textvariable=self.var_base, width=30,
+                  font=theme.FONT_BODY).grid(row=r - 1, column=1, sticky="w", pady=6)
 
         r = self._row(body, r, "开机自启")
-        start_box = tk.Frame(body, bg=theme.BG)
+        start_box = tk.Frame(body, bg=theme.CARD)
         start_box.grid(row=r - 1, column=1, columnspan=2, sticky="w")
         try:
             enabled_now = autostart.is_enabled()
@@ -677,24 +758,27 @@ class SettingsDialog(object):
         self.var_autostart = tk.BooleanVar(value=enabled_now)
         self.var_silent = tk.BooleanVar(
             value=bool(self.cfg.get("startup.silent_when_autostart", False)))
-        tk.Checkbutton(start_box, text="开机时自动启动本程序",
-                       variable=self.var_autostart, bg=theme.BG, fg=theme.TEXT,
-                       font=(FONT, 9), activebackground=theme.BG,
-                       selectcolor=theme.CARD).pack(anchor="w")
-        tk.Checkbutton(start_box, text="自启时静默启动（只留托盘，不弹窗口）",
-                       variable=self.var_silent, bg=theme.BG, fg=theme.MUTED,
-                       font=(FONT, 8), activebackground=theme.BG,
-                       selectcolor=theme.CARD).pack(anchor="w")
+        ttk.Checkbutton(start_box, text="开机时自动启动本程序",
+                        variable=self.var_autostart,
+                        style="TCheckbutton").pack(anchor="w")
+        ttk.Checkbutton(start_box, text="自启时静默启动（只留托盘，不弹窗口）",
+                        variable=self.var_silent,
+                        style="TCheckbutton").pack(anchor="w")
         tk.Label(body, text="开机自启只负责把程序跑起来，不会自动认证。",
-                 bg=theme.BG, fg=theme.MUTED, font=(FONT, 8)).grid(
-                     row=r, column=1, columnspan=2, sticky="w")
+                 bg=theme.CARD, fg=theme.MUTED, font=theme.FONT_SMALL).grid(
+                     row=r, column=1, columnspan=2, sticky="w", pady=(2, 0))
 
-        btns = tk.Frame(body, bg=theme.BG)
-        btns.grid(row=r + 2, column=0, columnspan=3, sticky="e",
-                  padx=16, pady=14)
-        ttk.Button(btns, text="保存", command=self.save).pack(side=tk.RIGHT)
-        ttk.Button(btns, text="取消", command=self.win.destroy).pack(
-            side=tk.RIGHT, padx=8)
+        bar = tk.Frame(card, bg=theme.PRIMARY_TINT)
+        bar.grid(row=r + 2, column=0, columnspan=3, sticky="ew")
+        btns = tk.Frame(bar, bg=theme.PRIMARY_TINT)
+        btns.pack(side=tk.RIGHT, padx=16, pady=12)
+        RoundedButton(btns, text="取消", style="soft", height=36,
+                      parent_bg=theme.PRIMARY_TINT, font=theme.FONT_BUTTON,
+                      command=self.win.destroy).pack(side=tk.RIGHT)
+        RoundedButton(btns, text="保存", style="accent", height=36,
+                      parent_bg=theme.PRIMARY_TINT,
+                      font=theme.FONT_BUTTON_BOLD,
+                      command=self.save).pack(side=tk.RIGHT, padx=10)
 
     def save(self):
         username = self.var_user.get().strip()
@@ -721,7 +805,12 @@ class SettingsDialog(object):
             return
         try:
             autostart.set_enabled(want_autostart, silent=silent)
-        except autostart.AutostartUnsupported as exc:
+        except Exception as exc:
+            # 不能只接 AutostartUnsupported：注册表被拒、路径异常等都会抛别的异常，
+            # 而在窗口程序里 Tk 会把它打到 stderr（用户根本看不到），
+            # 结果就是"勾了却没生效"——必须显式告诉用户。
+            if self.app and self.app.logger:
+                self.app.logger.exception("设置开机自启失败")
             messagebox.showwarning("校园网助手", "开机自启未能设置：%s" % exc,
                                    parent=self.win)
         self.win.destroy()
@@ -818,15 +907,16 @@ def run_selftest():
         box.transient(app.root)
         tk.Label(box, text="自检通过 ✔" if outcome["ok"] else "自检失败 ✘",
                  bg=theme.CARD, fg=theme.TEXT,
-                 font=(FONT, 13, "bold")).pack(anchor="w")
+                 font=theme.FONT_SECTION).pack(anchor="w")
         tk.Label(box, text=outcome["note"], bg=theme.CARD, fg=theme.MUTED,
-                 font=(FONT, 9), wraplength=420,
+                 font=theme.FONT_SMALL, wraplength=420,
                  justify=tk.LEFT).pack(anchor="w", pady=(6, 2))
         tk.Label(box, text="详细结果见日志：\n%s" % logmod.log_path(),
-                 bg=theme.CARD, fg=theme.MUTED, font=(FONT, 8),
+                 bg=theme.CARD, fg=theme.MUTED, font=theme.FONT_SMALL,
                  wraplength=420, justify=tk.LEFT).pack(anchor="w")
-        ttk.Button(box, text="关闭", command=box.destroy).pack(anchor="e",
-                                                               pady=(10, 0))
+        RoundedButton(box, text="关闭", style="soft", height=34,
+                      parent_bg=theme.CARD, font=theme.FONT_BUTTON,
+                      command=box.destroy).pack(anchor="e", pady=(12, 0))
         box.after(10000, lambda: box.winfo_exists() and box.destroy())
         app.root.wait_window(box)
     except Exception:

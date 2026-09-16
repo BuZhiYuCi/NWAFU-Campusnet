@@ -48,8 +48,8 @@ class TrayIcon(object):
         if not self.available:
             return False
         self._state = state
-        self._icon = pystray.Icon("campusnet", theme.make_dot_image(
-            theme.color_for(state)), tooltip, self._menu())
+        self._icon = pystray.Icon("campusnet", theme.make_tray_image(state),
+                                  tooltip, self._menu())
         threading.Thread(target=self._icon.run, daemon=True).start()
         return True
 
@@ -58,7 +58,7 @@ class TrayIcon(object):
             return
         self._state = state
         try:
-            self._icon.icon = theme.make_dot_image(theme.color_for(state))
+            self._icon.icon = theme.make_tray_image(state)
             self._icon.title = tooltip
         except Exception:
             pass

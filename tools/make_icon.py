@@ -1,41 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""生成程序图标 assets/campusnet.ico。
+"""由校徽图生成程序图标 assets/campusnet.ico。
 
-图案：蓝色圆角底 + 白色信号弧 + 绿色圆点（呼应界面里的三色状态灯）。
-纯几何绘制，不依赖字体，任何机器上生成结果都一样。
+源图 assets/nwafu-emblem.png 由 tools/extract_emblem.py 从学校官方
+《（2020章程）校徽》PDF 中提取（矢量原件的 600dpi 渲染，圆形外底已抠透明）。
+
+用法:
+    python tools/make_icon.py
 """
 
 import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT_DIR = os.path.join(ROOT, "assets")
-OUT = os.path.join(OUT_DIR, "campusnet.ico")
+SRC = os.path.join(ROOT, "assets", "nwafu-emblem.png")
+OUT = os.path.join(ROOT, "assets", "campusnet.ico")
+UI_OUT = os.path.join(ROOT, "assets", "emblem-ui.png")
 
-BLUE = "#1a73e8"
-GREEN = "#2e9e4f"
-
-
-def draw(size=256):
-    from PIL import Image, ImageDraw
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw_ctx = ImageDraw.Draw(image)
-
-    draw_ctx.rounded_rectangle([0, 0, size - 1, size - 1],
-                               radius=int(size * 0.22), fill=BLUE)
-
-    # 三段信号弧，圆心在绿点处，向上展开
-    cx, cy = size * 0.5, size * 0.72
-    width = max(2, int(size * 0.075))
-    for radius in (0.26, 0.38, 0.50):
-        r = size * radius
-        draw_ctx.arc([cx - r, cy - r, cx + r, cy + r],
-                     start=205, end=335, fill="#ffffff", width=width)
-
-    r = size * 0.085
-    draw_ctx.ellipse([cx - r, cy - r, cx + r, cy + r], fill=GREEN)
-    return image
+#: Windows 图标常用尺寸，从大到小都带上，任务栏/资源管理器都清晰
+SIZES = [(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (24, 24), (16, 16)]
 
 
 def main():
@@ -44,15 +27,28 @@ def main():
     except ImportError:
         print("需要 Pillow：python -m pip install Pillow")
         return 2
-    os.makedirs(OUT_DIR, exist_ok=True)
-    image = draw(256)
-    image.save(OUT, format="ICO",
-               sizes=[(256, 256), (128, 128), (64, 64), (48, 48),
-                      (32, 32), (16, 16)])
-    png = os.path.join(OUT_DIR, "campusnet.png")
-    image.save(png, format="PNG")
-    print("已生成 %s（%d 字节）" % (OUT, os.path.getsize(OUT)))
-    print("已生成 %s（%d 字节）" % (png, os.path.getsize(png)))
+    if not os.path.exists(SRC):
+        print("找不到校徽图：%s" % SRC)
+        print("请先运行：python tools/extract_emblem.py <校徽.pdf>")
+        return 2
+
+    src = Image.open(SRC).convert("RGBA")
+    if src.width != src.height:
+        side = max(src.size)
+        canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+        canvas.paste(src, ((side - src.width) // 2, (side - src.height) // 2), src)
+        src = canvas
+    src.save(OUT, format="ICO", sizes=SIZES)
+    print("已生成 %s（%d 字节，含 %d 种尺寸）"
+          % (OUT, os.path.getsize(OUT), len(SIZES)))
+    for size in SIZES:
+        print("   %dx%d" % size)
+
+    # 界面里显示用（96px，Tk 里 subsample(2) 就是 48px，放大屏也清楚）
+    from PIL import Image
+    ui = src.resize((96, 96), Image.LANCZOS)
+    ui.save(UI_OUT, format="PNG")
+    print("已生成 %s（%d 字节）" % (UI_OUT, os.path.getsize(UI_OUT)))
     return 0
 
 

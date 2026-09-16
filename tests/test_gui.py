@@ -146,7 +146,7 @@ class WindowTest(GuiTestBase):
         app = self.make_app(FakeClient(status=OFFLINE, devices=[]))
         app.refresh()
         pump(app, 3.0, until=lambda: app.state == models.STATE_OFFLINE)
-        self.assertEqual("未登录（离线）", app.state_label.cget("text"))
+        self.assertEqual("未登录", app.state_label.cget("text"))
         self.assertEqual(theme.color_for(models.STATE_OFFLINE),
                          app.dot.itemcget(app._dot_id, "fill"))
 
