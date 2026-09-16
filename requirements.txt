@@ -1,0 +1,13 @@
+# 核心库（Phase 0 ~ Phase 4）零第三方依赖，只用 Python 标准库（3.10+）。
+# 无需 pip install 即可运行：
+#     python tools/verify_library.py
+#     python -m unittest discover -s tests
+
+# 以下依赖只有后续阶段才需要，届时再取消注释：
+#
+# Phase 5 图形界面（主窗口用标准库 tkinter；托盘图标需要下面两个）：
+pystray>=0.19
+Pillow>=10.0
+#
+# Phase 7 打包成单文件 exe：
+# pyinstaller>=6.0

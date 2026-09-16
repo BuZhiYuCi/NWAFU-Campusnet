@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "portal": {
+    "base_url": "http://172.26.8.11",
+    "ac_id": "1",
+    "username": "你的学号或账号",
+    "password_dpapi": "（这里只会是 DPAPI 密文，不会出现明文密码）",
+    "cipher": "dpapi",
+    "os_name": "Windows 10",
+    "client_name": "Windows",
+    "timeout_sec": 8,
+    "login_timeout_sec": 30,
+    "confirm_timeout_sec": 90
+  },
+  "behavior": {
+    "kick_mode": "preselect_oldest",
+    "logout_method": "dm",
+    "confirm_before_kick": true,
+    "batch_kick_interval_ms": 800,
+    "login_cooldown_sec": 10,
+    "max_login_attempts": 3
+  },
+  "startup": {
+    "autostart": false,
+    "open_window_on_start": true,
+    "silent_when_autostart": false,
+    "auto_login_on_start": false
+  },
+  "devices": [],
+  "ui": {
+    "tray": true,
+    "hotkey_login": "Ctrl+Alt+L",
+    "hotkey_logout": "Ctrl+Alt+K"
+  }
+}
