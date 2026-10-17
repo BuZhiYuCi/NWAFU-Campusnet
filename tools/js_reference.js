@@ -133,9 +133,9 @@ function hmacMd5Hex(key, msg) {
 
 const cases = [
   { token: 'c436b50ea8065baf5e938b4a5c334cc374af9faf952a60aa27f31e647c402d12',
-    username: '17782817252', password: 'Test-Pass-A1', ip: '10.128.96.98', acid: '1' },
+    username: '20230000001', password: 'Test-Pass-A1', ip: '10.128.96.98', acid: '1' },
   { token: '0f8afd7ea13f9ec8dbbac4d68ff10f467578da86c77f2369b58b0fa5298a573b',
-    username: '17782817252@yx-s-student', password: 'unit-test-xyz', ip: '10.111.147.127', acid: '1' },
+    username: '20230000001@yx-s-student', password: 'unit-test-xyz', ip: '10.111.147.127', acid: '1' },
   { token: 'shortToken123', username: 'u2', password: 'p2', ip: '10.0.0.1', acid: '2' },
   { token: 'B', username: 'a', password: 'b', ip: '1.2.3.4', acid: '1' },
   { token: '1234567890abcdef', username: 'abcdefg', password: '', ip: '10.9.8.7', acid: '10' }

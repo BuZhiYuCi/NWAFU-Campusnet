@@ -1,6 +1,11 @@
 # 深澜（SRun）门户 172.26.8.11 接口与算法分析
 
 本文所有结论来自对门户前端 JS 的静态阅读 + 对服务器的只读 GET 实测。
+
+> 脱敏说明：文中示例里的账号已统一替换为 `20230000001`。
+> 替换后示例中的 `hmd5`/`info`/`chksum` 与原始抓包不再一一对应，
+> 只用于说明字段形状与算法流程；需要可校验的完整向量见 `tests/vectors.json`。
+
 抓取到的原始文件（可随时从门户重新下载，注意：带 `?v=xxx` 查询串会返回空内容，去掉即可）：
 
 ```
@@ -73,7 +78,7 @@ cb({"challenge":"c436b50ea8065baf5e938b4a5c334cc374af9faf952a60aa27f31e647c402d1
 | 参数 | 值 | 说明 |
 | --- | --- | --- |
 | action | login | |
-| username | **<账号>，不带域名后缀** | 实测确认：`17782817252` 直接登录成功；不需要 `@yx-s-student` |
+| username | **<账号>，不带域名后缀** | 实测确认：`20230000001` 直接登录成功；不需要 `@yx-s-student` |
 | password | {MD5}<hmd5> | 见 3.2 |
 | os | 例 Windows 10 | 设备系统标识 |
 | name | 例 Windows | 平台标识 |
@@ -90,7 +95,7 @@ cb({"challenge":"c436b50ea8065baf5e938b4a5c334cc374af9faf952a60aa27f31e647c402d1
 实测确认可用的完整参数组合（`docs/phase0-report.md` 有原始请求与响应）：
 
 ```
-callback=cb&action=login&username=17782817252&password={MD5}<hmd5>
+callback=cb&action=login&username=20230000001&password={MD5}<hmd5>
 &os=Windows 10&name=Windows&double_stack=0&chksum=<sha1>&info={SRBX1}<base64>
 &ac_id=1&ip=<本机IP>&n=200&type=1
 ```
@@ -192,7 +197,7 @@ XXTEA 细节（JS 里的常量经还原后都是标准值）：
 cb({"ServerFlag":0,"ServicesIntfServerIP":"172.26.8.13","ServicesIntfServerPort":"8001",
     "access_token":"...","client_ip":"10.128.96.98","ecode":0,"error":"ok","error_msg":"",
     "online_ip":"10.128.96.98","res":"ok","suc_msg":"ip_already_online_error",
-    "srun_ver":"SRunCGIAuthIntfSvr V1.18 B20210607","username":"17782817252"})
+    "srun_ver":"SRunCGIAuthIntfSvr V1.18 B20210607","username":"20230000001"})
 ```
 
 真实登录成功时（离线状态下发起）：
@@ -253,7 +258,7 @@ GET /cgi-bin/rad_user_info?callback=cb        # 不带参数：按来源 IP 查
 实测（带 callback）返回完整 JSON，关键字段：
 
 ```json
-{"user_name":"17782817252","online_ip":"10.128.96.98",
+{"user_name":"20230000001","online_ip":"10.128.96.98",
  "online_ip6":"2001:250:1002:6100::dd5c",
  "user_mac":"08:8f:c3:e2:37:57","domain":"yx-s-student",
  "online_device_total":"2","add_time":1789216539,
@@ -266,7 +271,7 @@ GET /cgi-bin/rad_user_info?callback=cb        # 不带参数：按来源 IP 查
 不带 callback 时返回逗号分隔的裸串（第 9 个字段为 online_ip）：
 
 ```
-17782817252,1789216539,1789486085,30338832749,3168452827,0,22214615814,364609,10.128.96.98,0,,...
+20230000001,1789216539,1789486085,30338832749,3168452827,0,22214615814,364609,10.128.96.98,0,,...
 ```
 
 用途：判断本机是否在线（比对 online_ip 与本机 IP）、读取已用流量/时长/在线设备总数。
@@ -300,9 +305,9 @@ GET /v1/srun_portal_online?user_name=<账号>&password=<md5(明文密码)>
 ```json
 {"code":0,"message":"Success","data":[
   {"add_time":"2026-09-12 20:35:39","client_type":"1","ip":"10.128.96.98",
-   "os_name":"Windows 10","user_name":"17782817252"},
+   "os_name":"Windows 10","user_name":"20230000001"},
   {"add_time":"2026-09-12 21:50:49","client_type":"1","ip":"10.111.147.127",
-   "os_name":"Windows 10","user_name":"17782817252"}
+   "os_name":"Windows 10","user_name":"20230000001"}
 ]}
 ```
 
@@ -496,13 +501,13 @@ Invoke-WebRequest http://172.26.8.11/ -MaximumRedirection 0 -UseBasicParsing
 Invoke-WebRequest 'http://172.26.8.11/srun_portal_pc?ac_id=1&theme=pro' -UseBasicParsing
 
 # 3. 拿 token（注意必须带 callback）
-Invoke-WebRequest 'http://172.26.8.11/cgi-bin/get_challenge?callback=cb&username=17782817252&ip=<本机IP>' -UseBasicParsing
+Invoke-WebRequest 'http://172.26.8.11/cgi-bin/get_challenge?callback=cb&username=20230000001&ip=<本机IP>' -UseBasicParsing
 
 # 4. 本机在线信息
 Invoke-WebRequest 'http://172.26.8.11/cgi-bin/rad_user_info?callback=cb' -UseBasicParsing
 
 # 5. 在线设备列表（password 为 md5(明文密码) 的十六进制）
-Invoke-WebRequest 'http://172.26.8.11/v1/srun_portal_online?user_name=17782817252&password=<md5>' -UseBasicParsing
+Invoke-WebRequest 'http://172.26.8.11/v1/srun_portal_online?user_name=20230000001&password=<md5>' -UseBasicParsing
 
 # 6. 前端脚本（注意：加 ?v=xxx 会返回空内容）
 Invoke-WebRequest 'http://172.26.8.11/static/themes/pro/js/Portal.js' -UseBasicParsing
