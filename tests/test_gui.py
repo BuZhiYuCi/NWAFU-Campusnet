@@ -49,7 +49,7 @@ def device_list():
 
 ONLINE = models.OnlineStatus(
     online=True, error="ok",
-    raw={"error": "ok", "online_ip": "10.128.96.98", "user_name": "17782817252",
+    raw={"error": "ok", "online_ip": "10.128.96.98", "user_name": "20230000001",
          "online_device_total": "2"})
 OFFLINE = models.OnlineStatus(online=False, error="not_online_error",
                               raw={"online_ip": "10.128.96.98"})
@@ -85,6 +85,18 @@ class FakeClient(object):
         return models.Result(kind=models.SUCCESS, raw={}, ip=ip, username=username)
 
 
+class CountingClient(FakeClient):
+    """记录 local_state 被调用几次，用来验证"补跑刷新"确实发生了。"""
+
+    def __init__(self, *args, **kwargs):
+        FakeClient.__init__(self, *args, **kwargs)
+        self.state_calls = 0
+
+    def local_state(self, username=None, password=None, timeout=None):
+        self.state_calls += 1
+        return FakeClient.local_state(self, username, password, timeout)
+
+
 def pump(app, seconds=3.0, until=None):
     """跑 Tk 事件循环，直到条件满足或超时。"""
     deadline = time.time() + seconds
@@ -109,7 +121,7 @@ class GuiTestBase(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="campusnet-gui-")
         self.cfg = Config(path=os.path.join(self.tmp, "config.json"),
                           cipher=FakeCipher())
-        self.cfg.set_credentials("17782817252", "pwd-1234")
+        self.cfg.set_credentials("20230000001", "pwd-1234")
         self.apps = []
 
     def tearDown(self):
@@ -137,7 +149,7 @@ class WindowTest(GuiTestBase):
         self.assertEqual(models.STATE_ONLINE, app.state)
         self.assertEqual(2, len(app.tree.get_children()))
         self.assertIn("10.111.147.127", app.tree.get_children())
-        self.assertIn("账号 17782817252", app.detail_label.cget("text"))
+        self.assertIn("账号 20230000001", app.detail_label.cget("text"))
         # 状态圆点用的是"在线"色
         self.assertEqual(theme.color_for(models.STATE_ONLINE),
                          app.dot.itemcget(app._dot_id, "fill"))
@@ -332,7 +344,7 @@ class FirstRunTest(GuiTestBase):
             if dialog is None or not dialog.win.winfo_exists():
                 app.root.after(200, save_it)     # 向导还没弹出来，等等
                 return
-            dialog.var_user.set("17782817252")
+            dialog.var_user.set("20230000001")
             dialog.var_pwd.set("pwd-1234")
             dialog.save()
 
@@ -366,16 +378,134 @@ class FirstRunTest(GuiTestBase):
         self.assertEqual(models.STATE_OFFLINE, app.state)
 
 
+class RefreshRobustnessTest(GuiTestBase):
+    """回归：界面更新出错时不能把"正在检测…"和忙碌状态一起锁死。"""
+
+    def test_render_failure_does_not_freeze_ui(self):
+        app = self.make_app(FakeClient())
+
+        def boom():
+            raise tk.TclError("Item 10.111.147.127 already exists")
+
+        app._render_devices = boom
+        app.refresh()
+        pump(app, 3.0, until=lambda: not app._busy)
+        self.assertFalse(app._busy, "渲染失败也必须解除忙碌状态")
+        self.assertNotEqual("正在检测…", app.state_label.cget("text"))
+        self.assertEqual(models.STATE_ONLINE, app.state,
+                         "列表渲染失败不该影响状态判定")
+        self.assertIn("渲染失败", app.section_label.cget("text"))
+
+    def test_duplicate_ip_rows_do_not_break_refresh(self):
+        """同一 IP 的多条会话（双栈/残留）不能让 tree.insert 抛 TclError。"""
+        devices = device_list()
+        devices.append(devices[0])
+        app = self.make_app(FakeClient(devices=devices))
+        app.refresh()
+        pump(app, 3.0, until=lambda: not app._busy)
+        self.assertFalse(app._busy)
+        self.assertEqual(2, len(app.tree.get_children()), "重复 IP 应只显示一行")
+        self.assertNotEqual("正在检测…", app.state_label.cget("text"))
+
+    def test_refresh_while_busy_is_rerun_after_finish(self):
+        """忙碌期间的刷新请求不能被静默丢弃，否则保存设置后界面不会更新。"""
+        client = CountingClient()
+        app = self.make_app(client)
+        base = client.state_calls
+
+        app._set_busy(True, "正在查询…")      # 模拟一次刷新还在飞
+        app.refresh()                          # 此时请求应被记下
+        self.assertTrue(app._refresh_pending)
+        app._finish_refresh("已更新")          # 上一次收尾
+        pump(app, 3.0, until=lambda: client.state_calls > base and not app._busy)
+        self.assertGreater(client.state_calls, base, "收尾后必须补跑那次刷新")
+        self.assertFalse(app._refresh_pending)
+
+
+class RecoveryTest(GuiTestBase):
+    """看门狗、迟到结果、连点、保存失败——都是"卡死"类缺陷的防线。"""
+
+    def setUp(self):
+        super(RecoveryTest, self).setUp()
+        self._orig_mb = (gui.messagebox.showinfo, gui.messagebox.showerror,
+                         gui.messagebox.showwarning, gui.messagebox.askyesno)
+        self.infos, self.errors = [], []
+        gui.messagebox.showinfo = lambda *a, **k: self.infos.append(a)
+        gui.messagebox.showerror = lambda *a, **k: self.errors.append(a)
+        gui.messagebox.showwarning = lambda *a, **k: self.errors.append(a)
+        gui.messagebox.askyesno = lambda *a, **k: True
+
+    def tearDown(self):
+        (gui.messagebox.showinfo, gui.messagebox.showerror,
+         gui.messagebox.showwarning, gui.messagebox.askyesno) = self._orig_mb
+        super(RecoveryTest, self).tearDown()
+
+    def test_watchdog_releases_busy_after_timeout(self):
+        """TP-GUI-06：worker 卡死时看门狗必须把界面救回来。"""
+        app = self.make_app(FakeClient())
+        original = gui.REFRESH_WATCHDOG_MS
+        gui.REFRESH_WATCHDOG_MS = 300
+        try:
+            app._set_busy(True, "正在查询…")
+            app._arm_watchdog()
+            pump(app, 3.0, until=lambda: not app._busy)
+        finally:
+            gui.REFRESH_WATCHDOG_MS = original
+        self.assertFalse(app._busy, "看门狗必须解除忙碌状态")
+        self.assertIn("超时", app.status_bar.cget("text"))
+        self.assertNotEqual("正在检测…", app.state_label.cget("text"))
+
+    def test_stale_result_does_not_clear_busy(self):
+        """TP-GUI-07：被看门狗判死的迟到结果不能再动界面。"""
+        app = self.make_app(FakeClient())
+        app._set_busy(True, "正在查询…")
+        stale_seq = app._refresh_seq
+        app._refresh_seq += 1           # 模拟已经开了新一轮刷新
+        app._finish_refresh("迟到的结果", stale_seq)
+        self.assertTrue(app._busy, "迟到结果不得解除新一次刷新的忙碌状态")
+
+    def test_rapid_login_clicks_fire_once(self):
+        """TP-GUI-08：连点一键登录只发起一次请求。"""
+        client = FakeClient(status=OFFLINE, devices=[])
+        client._login_outcome = models.Result(
+            kind=models.SUCCESS, raw={"ploy_msg": "E0000: Login is successful"},
+            detail={"confirmed": True})
+        app = self.make_app(client)
+        for _ in range(5):
+            app.action_login()
+        pump(app, 4.0, until=lambda: "login" in client.calls and not app._busy)
+        self.assertEqual(1, client.calls.count("login"), "连点只应发起一次请求")
+
+    def test_save_failure_is_reported_and_dialog_stays(self):
+        """TP-CFG-08：配置写不进去时必须提示，且不关掉对话框让用户白填。"""
+        app = self.make_app(FakeClient())
+        dialog = gui.SettingsDialog(app, app.cfg, first_run=False)
+        original_save = app.cfg.save
+
+        def boom():
+            raise OSError("磁盘只读")
+
+        app.cfg.save = boom
+        try:
+            dialog.var_user.set("20230000001")
+            dialog.var_pwd.set("pwd-1234")
+            dialog.save()
+        finally:
+            app.cfg.save = original_save
+        self.assertTrue(self.errors, "保存失败必须提示用户")
+        self.assertTrue(dialog.win.winfo_exists(), "保存失败不应关闭对话框")
+
+
 class SettingsDialogTest(GuiTestBase):
     def test_first_run_saves_credentials(self):
         cfg = Config(path=os.path.join(self.tmp, "c.json"), cipher=FakeCipher())
         app = self.make_app(FakeClient())
         dlg = gui.SettingsDialog(app, cfg, first_run=True)
-        dlg.var_user.set("17782817252")
+        dlg.var_user.set("20230000001")
         dlg.var_pwd.set("secret-pw")
         dlg.save()
         reloaded = Config(path=cfg.path, cipher=FakeCipher()).load()
-        self.assertEqual("17782817252", reloaded.username)
+        self.assertEqual("20230000001", reloaded.username)
         self.assertEqual("secret-pw", reloaded.get_password())
         with open(cfg.path, "r", encoding="utf-8") as f:
             self.assertNotIn("secret-pw", f.read())

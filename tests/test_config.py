@@ -66,14 +66,14 @@ class DefaultsTest(ConfigTestBase):
 class RoundTripTest(ConfigTestBase):
     def test_save_and_reload(self):
         cfg = self.make().load()
-        cfg.set("portal.username", "17782817252")
+        cfg.set("portal.username", "20230000001")
         cfg.set("behavior.kick_mode", "manual")
         cfg.set("startup.autostart", True)
         cfg.save()
 
         again = self.make().load()
         self.assertTrue(again.loaded)
-        self.assertEqual("17782817252", again.username)
+        self.assertEqual("20230000001", again.username)
         self.assertEqual("manual", again.kick_mode)
         self.assertTrue(again.get("startup.autostart"))
 
@@ -114,16 +114,16 @@ class RoundTripTest(ConfigTestBase):
 class CredentialsTest(ConfigTestBase):
     def test_password_roundtrip(self):
         cfg = self.make().load()
-        cfg.set_credentials("17782817252", FAKE_PASSWORD)
+        cfg.set_credentials("20230000001", FAKE_PASSWORD)
         cfg.save()
         again = self.make().load()
         self.assertTrue(again.has_credentials)
-        self.assertEqual("17782817252", again.username)
+        self.assertEqual("20230000001", again.username)
         self.assertEqual(FAKE_PASSWORD, again.get_password())
 
     def test_plaintext_password_is_not_written_to_disk(self):
         cfg = self.make().load()
-        cfg.set_credentials("17782817252", FAKE_PASSWORD)
+        cfg.set_credentials("20230000001", FAKE_PASSWORD)
         cfg.save()
         with open(self.path, "r", encoding="utf-8") as f:
             raw = f.read()
@@ -164,10 +164,39 @@ class CredentialsTest(ConfigTestBase):
 
     def test_repr_never_shows_password(self):
         cfg = self.make().load()
-        cfg.set_credentials("17782817252", FAKE_PASSWORD)
+        cfg.set_credentials("20230000001", FAKE_PASSWORD)
         text = repr(cfg)
         self.assertNotIn(FAKE_PASSWORD, text)
-        self.assertIn("17782817252", text)
+        self.assertIn("20230000001", text)
+
+
+class BrokenFileTest(ConfigTestBase):
+    """配置文件读不动时的抢救行为（D-06a）。"""
+
+    def test_broken_json_is_backed_up_and_reported(self):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write('{"portal": {"username": "20230000001", "passw')
+        cfg = cfgmod.load_or_create(path=self.path, cipher=self.cipher)
+        self.assertFalse(cfg.loaded)
+        self.assertIsNotNone(cfg.load_error, "必须把失败原因记下来")
+        self.assertTrue(cfg.backup_path, "必须留下备份路径")
+        self.assertTrue(os.path.exists(cfg.backup_path), "备份文件要真的存在")
+        # 原文件不能被默认值覆盖：里面可能还有能手工抢救的密文
+        with open(self.path, "r", encoding="utf-8") as f:
+            self.assertIn("20230000001", f.read())
+
+    def test_missing_file_is_not_an_error(self):
+        cfg = cfgmod.load_or_create(path=self.path, cipher=self.cipher)
+        self.assertIsNone(cfg.load_error)
+        self.assertIsNone(cfg.backup_path)
+        self.assertFalse(cfg.loaded)
+
+    def test_non_object_json_is_treated_as_broken(self):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("[1, 2, 3]")
+        cfg = cfgmod.load_or_create(path=self.path, cipher=self.cipher)
+        self.assertIsNotNone(cfg.load_error)
+        self.assertTrue(os.path.exists(cfg.backup_path))
 
 
 class _FailingCipher(object):

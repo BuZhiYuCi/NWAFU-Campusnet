@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 from . import crypto
 from .models import (ALREADY_ONLINE, FULL, NETWORK_ERROR, NOT_ONLINE,
-                     SIGNATURE_ERROR, STATE_OFFLINE, STATE_ONLINE,
+                     SERVER_ERROR, SIGNATURE_ERROR, STATE_OFFLINE, STATE_ONLINE,
                      STATE_UNKNOWN, SUCCESS, UNKNOWN, UNPARSED, Challenge,
                      Device, OnlineStatus, Result)
 
@@ -95,15 +95,41 @@ def classify(raw):
         return SIGNATURE_ERROR
     if "already_online" in text:
         return ALREADY_ONLINE
-    if any(c in text for c in ("e2620", "e2621", "e6512")):
+    # E2620「已经在线了」是良性的，绝不能当成"在线数已满"——
+    # 一旦误判成 FULL，上层就会走"腾位"流程去踢一台设备，
+    # 而此刻真正在线的可能就是用户自己的机器（见 D-11）。
+    if "e2620" in text:
+        return ALREADY_ONLINE
+    if "e6526" in text:          # 您的 IP 已经在线，可以直接上网
+        return ALREADY_ONLINE
+    if any(c in text for c in ("e2621", "e6512")):
         return FULL
     if "not_online" in text:
+        return NOT_ONLINE
+    # 深澜的"不在线"有一整族错误码/字样，中文文案里没有 not_online 这个词。
+    # 漏掉它们会让"踢一台已经下线的设备"被当成失败（见 D-02）。
+    if any(c in text for c in ("e6503", "e6527", "e6528",
+                               "notonlineerror", "youarenotonline")):
         return NOT_ONLINE
     if ploy.upper().startswith("E0000"):
         return SUCCESS
     if err == "ok" and ecode in ("0", ""):
         return SUCCESS
     return UNKNOWN
+
+
+def classify_response(resp):
+    """在 ``classify`` 之外先看 HTTP 状态码。
+
+    门户前面有反向代理和准入门户，5xx 时经常仍返回一段**看起来像 JSON 的**错误页
+    （有时还带 ecode/ploy_msg），只按响应体分类会把它当成业务结论。
+    这里把 5xx 单独归为 SERVER_ERROR：调用方据此重试或改用轮询确认，
+    而不是立刻告诉用户"登录失败"甚至"在线数已满"。
+    """
+    status = getattr(resp, "status", None)
+    if isinstance(status, int) and status >= 500:
+        return SERVER_ERROR
+    return classify(getattr(resp, "parsed", None))
 
 
 class SrunPortalClient(object):
@@ -193,6 +219,11 @@ class SrunPortalClient(object):
         resp = self._request("/cgi-bin/rad_user_info",
                              {"callback": "cb", "_": _ts()}, timeout)
         data = resp.parsed
+        # 5xx 时网关常常仍返回一段带 "error":"ok" 的 JSON，直接采信会把
+        # "服务端挂了"读成"你在线"（见 D-11）。
+        if isinstance(resp.status, int) and resp.status >= 500:
+            return OnlineStatus(online=False, error=SERVER_ERROR,
+                                raw=data if isinstance(data, dict) else {})
         if not isinstance(data, dict):
             return OnlineStatus(online=False, error=UNPARSED, raw={})
         online = str(data.get("error", "")) == "ok"
@@ -236,7 +267,7 @@ class SrunPortalClient(object):
             "n": 200,
             "type": 1,
         }, timeout)
-        return Result(kind=classify(resp.parsed), raw=resp.parsed or {},
+        return Result(kind=classify_response(resp), raw=resp.parsed or {},
                       http_status=resp.status, ip=ip, username=username,
                       detail={"token": token, "chksum": chksum})
 
@@ -256,7 +287,7 @@ class SrunPortalClient(object):
             "ip": target_ip,
             "ac_id": ac_id,
         }, timeout)
-        return Result(kind=classify(resp.parsed), raw=resp.parsed or {},
+        return Result(kind=classify_response(resp), raw=resp.parsed or {},
                       http_status=resp.status, ip=target_ip, username=username)
 
     def kick(self, ip, username, unbind=1, timeout=None):
@@ -270,7 +301,7 @@ class SrunPortalClient(object):
             "unbind": unbind,
             "sign": sign,
         }, timeout)
-        return Result(kind=classify(resp.parsed), raw=resp.parsed or {},
+        return Result(kind=classify_response(resp), raw=resp.parsed or {},
                       http_status=resp.status, ip=ip, username=username,
                       detail={"time": t, "sign": sign})
 
@@ -379,7 +410,19 @@ class SrunPortalClient(object):
                                   error="ok" if state == STATE_ONLINE
                                   else "not_online_error",
                                   raw={"online_ip": my_ip})
-            status.raw["source"] = "device_list"
+        else:
+            # 状态是"推断"出来的，把 online 对齐到推断结果，
+            # 否则会出现 state=online 而 status.online=False 的自相矛盾输出。
+            # 注意必须新建对象：传进来的 status 可能被调用方复用，
+            # 就地改属性会污染下一次判定（实测踩过：模块级共享的 OnlineStatus
+            # 被上一个用例改成 online=True，下一个用例直接误判在线）。
+            status = OnlineStatus(online=(state == STATE_ONLINE),
+                                  error=status.error, raw=dict(status.raw))
+        # 打上标记：这是合成状态，不是服务端原话，user_name/mac 必然为空。
+        # 上层不能把它当成"确认在线且是本账号"，否则会误报 already_online（见 D-03/D-05）。
+        status.raw.setdefault("online_ip", my_ip)
+        status.raw["source"] = "device_list"
+        status.raw["synthetic"] = True
         return state, status, devices
 
     def wait_state(self, want, timeout=15.0, interval=2.0,
@@ -441,8 +484,12 @@ class SrunPortalClient(object):
         result.detail["devices"] = devices
         result.detail["confirmed"] = (state == STATE_ONLINE)
         if state == STATE_ONLINE:
-            if result.kind in (NETWORK_ERROR, UNKNOWN):
-                # 请求超时/响应丢失，但会话确实建立起来了
+            # 会话已经建立，之前撞上的 rad_user_info 限流冷却必须立刻作废：
+            # 否则接下来 60 秒内所有查询都会走"设备列表兜底"的合成状态，
+            # 刚登录成功却可能被判成离线（见 D-05）。
+            self._rate_limited_until = 0.0
+            if result.kind in (NETWORK_ERROR, UNKNOWN, SERVER_ERROR):
+                # 请求超时/响应丢失/服务端 5xx，但会话确实建立起来了
                 result.kind = SUCCESS
             if ip is None:
                 result.ip = status.ip

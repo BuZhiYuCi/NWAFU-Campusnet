@@ -3,24 +3,24 @@
     "algo": "hmac",
     "suffix": ""
   },
-  "my_ip": "10.128.96.98",
+  "my_ip": "10.0.0.1",
   "results": [
     {
       "algo": "hmac",
       "suffix": "",
       "verdict": "already_online",
-      "raw": "cb({\"ServerFlag\":0,\"ServicesIntfServerIP\":\"172.26.8.13\",\"ServicesIntfServerPort\":\"8001\",\"access_token\":\"f7294e22f0ab5caa16293d27f4e96f57cde5079fa144c1acb526c86d03476ec5\",\"checkout_date\":0,\"client_ip\":\"10.128.96.98\",\"ecode\":0,\"error\":\"ok\",\"error_msg\":\"\",\"online_ip\":\"10.128.96.98\",\"real_name\":\"\",\"remain_flux\":0,\"remain_times\":0,\"res\":\"ok\",\"srun_ver\":\"SRunCGIAuthIntfSvr V1.18 B20210607\",\"suc_msg\":\"ip_already_online_error\",\"sysver\":\"1.01.20210607\",\"username\":\"17782817252\",\"wallet_balance\":0})",
+      "raw": "cb({\"ServerFlag\":0,\"ServicesIntfServerIP\":\"172.26.8.13\",\"ServicesIntfServerPort\":\"8001\",\"access_token\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"checkout_date\":0,\"client_ip\":\"10.0.0.1\",\"ecode\":0,\"error\":\"ok\",\"error_msg\":\"\",\"online_ip\":\"10.0.0.1\",\"real_name\":\"\",\"remain_flux\":0,\"remain_times\":0,\"res\":\"ok\",\"srun_ver\":\"SRunCGIAuthIntfSvr V1.18 B20210607\",\"suc_msg\":\"ip_already_online_error\",\"sysver\":\"1.01.20210607\",\"username\":\"10000000000\",\"wallet_balance\":0})",
       "res": {
         "ServerFlag": 0,
         "ServicesIntfServerIP": "172.26.8.13",
         "ServicesIntfServerPort": "8001",
-        "access_token": "f7294e22f0ab5caa16293d27f4e96f57cde5079fa144c1acb526c86d03476ec5",
+        "access_token": "0000000000000000000000000000000000000000000000000000000000000000",
         "checkout_date": 0,
-        "client_ip": "10.128.96.98",
+        "client_ip": "10.0.0.1",
         "ecode": 0,
         "error": "ok",
         "error_msg": "",
-        "online_ip": "10.128.96.98",
+        "online_ip": "10.0.0.1",
         "real_name": "",
         "remain_flux": 0,
         "remain_times": 0,
@@ -28,10 +28,10 @@
         "srun_ver": "SRunCGIAuthIntfSvr V1.18 B20210607",
         "suc_msg": "ip_already_online_error",
         "sysver": "1.01.20210607",
-        "username": "17782817252",
+        "username": "10000000000",
         "wallet_balance": 0
       },
-      "username": "17782817252"
+      "username": "10000000000"
     }
   ]
 }

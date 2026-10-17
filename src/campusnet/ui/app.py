@@ -26,13 +26,17 @@ from .tray import TrayIcon
 
 FONT = "Microsoft YaHei UI"
 
+#: 刷新看门狗：超过这个时间 worker 还没收尾，就强制把界面救回来
+REFRESH_WATCHDOG_MS = 20000
+
 
 class TaskRunner(object):
     """在后台线程执行任务，把回调排到 Tk 主线程。"""
 
-    def __init__(self, root, logger=None):
+    def __init__(self, root, logger=None, on_error=None):
         self.root = root
         self.logger = logger
+        self.on_error = on_error
         self._queue = queue.Queue()
         self._stopped = False
         self._after_id = None
@@ -71,6 +75,12 @@ class TaskRunner(object):
                     else:
                         import traceback
                         traceback.print_exc()
+                    # 只写日志等于让界面无声卡死：必须回到界面上告诉用户
+                    if self.on_error:
+                        try:
+                            self.on_error(exc)
+                        except Exception:
+                            pass
         finally:
             try:  # 窗口已销毁时 after 会抛异常，忽略即可
                 self._after_id = self.root.after(50, self._pump)
@@ -113,6 +123,10 @@ class App(object):
         self.my_ip = None
         self._busy = False
         self._closing = False
+        self._refresh_pending = False   # 忙碌期间被挡下的刷新请求，收尾后补跑
+        self._refresh_seq = 0           # 刷新序号，用来丢弃被看门狗判死的迟到结果
+        self._watchdog_id = None        # 刷新看门狗，防止 worker 卡死不收尾
+        self._error_shown = False       # 回调异常只弹一次，避免刷屏
         self._ui_thread = threading.current_thread()
         self._settings_dialog = None
 
@@ -129,7 +143,7 @@ class App(object):
                 self.root.iconphoto(True, window_icon)
             except Exception:
                 pass
-        self.runner = TaskRunner(self.root, logger)
+        self.runner = TaskRunner(self.root, logger, on_error=self._on_ui_error)
 
         self._build_ui()
 
@@ -143,9 +157,14 @@ class App(object):
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         if start_hidden and self.tray and self.tray.available:
             self.root.withdraw()
-        self.root.after(150, self.refresh)
-        if not cfg.has_credentials and not start_hidden:
-            self.root.after(300, lambda: self.open_settings(first_run=True))
+        if cfg.has_credentials:
+            self.root.after(150, self.refresh)
+        else:
+            # 没有账号时那次刷新毫无意义：它只会占住 _busy，
+            # 让"向导保存后触发的那次刷新"被 if self._busy 直接丢弃（首次使用卡死的根源之一）
+            self._show_unconfigured()
+            if not start_hidden:
+                self.root.after(300, lambda: self.open_settings(first_run=True))
 
     # ------------------------------------------------------------------
     # 界面搭建
@@ -283,12 +302,111 @@ class App(object):
     def _status(self, message):
         self.status_bar.configure(text=message)
 
+    def _show_unconfigured(self):
+        """没有账号时的占位提示。
+
+        不能只靠"正在检测…"这个初始文本——它会让用户以为程序在工作，
+        实际是在等一个永远不会发生的刷新。
+        """
+        self._set_state(STATE_UNKNOWN)
+        self.state_label.configure(text="未设置账号")
+        self.detail_label.configure(text="请点右上角【设置】填写学号和密码")
+
+    def _on_ui_error(self, exc):
+        """主线程回调抛异常时的兜底：解除忙碌 + 让用户看得见。"""
+        try:
+            self._set_busy(False, "界面更新出错")
+        except Exception:
+            self._busy = False
+        label = getattr(self, "detail_label", None)
+        if label is not None:
+            try:
+                label.configure(text="界面更新出错：%s" % exc)
+            except Exception:
+                pass
+        if self._error_shown or self._closing:
+            return
+        self._error_shown = True
+        if self._settings_dialog is not None:
+            return          # 模态窗口开着时弹框容易抢焦点，先只写在界面上
+        try:
+            messagebox.showerror(
+                "校园网助手",
+                "界面更新出错，操作已恢复。\n\n%s\n\n详细日志：%s"
+                % (exc, logmod.log_path()))
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # 刷新收尾：状态文字与忙碌标记必须无条件更新
+    # ------------------------------------------------------------------
+    def _arm_watchdog(self):
+        self._disarm_watchdog()
+        try:
+            self._watchdog_id = self.root.after(REFRESH_WATCHDOG_MS,
+                                                self._on_watchdog)
+        except Exception:
+            self._watchdog_id = None
+
+    def _disarm_watchdog(self):
+        if self._watchdog_id is None:
+            return
+        try:
+            self.root.after_cancel(self._watchdog_id)
+        except Exception:
+            pass
+        self._watchdog_id = None
+
+    def _on_watchdog(self):
+        """worker 卡死时也要把界面救回来，不能让"正在检测…"永久挂着。"""
+        self._watchdog_id = None
+        if not self._busy:
+            return
+        if self.logger:
+            self.logger.warning("刷新超过 %d 秒未收尾，强制解除忙碌状态",
+                                REFRESH_WATCHDOG_MS // 1000)
+        self._set_state(STATE_UNKNOWN)
+        self.detail_label.configure(
+            text="查询超过 %d 秒仍未返回，请检查网络后点【刷新】重试"
+                 % (REFRESH_WATCHDOG_MS // 1000))
+        self._finish_refresh("查询超时")
+
+    def _finish_refresh(self, message, seq=None):
+        if seq is not None and seq != self._refresh_seq:
+            # 这次刷新已被看门狗判超时、或已被更新的刷新取代，别再去动界面
+            return
+        self._disarm_watchdog()
+        self._set_busy(False, message)
+        if self._refresh_pending and not self._closing:
+            self._refresh_pending = False
+            try:
+                self.root.after(0, self.refresh)
+            except Exception:
+                pass
+
     # ------------------------------------------------------------------
     # 设备列表
     # ------------------------------------------------------------------
+    def _visible_devices(self):
+        """渲染/勾选用的设备列表：丢掉没有 IP 的脏行，同一 IP 只留一条。
+
+        同一 IP 出现多条会话（双栈各一条、或服务端残留旧会话）是实测可能发生的；
+        而 Treeview 的 iid 必须唯一，重复时 insert 会抛
+        ``TclError: Item 10.x.x.x already exists``——这正是"卡在正在检测…"的元凶之一。
+        """
+        out, seen = [], set()
+        for dev in policy.sort_oldest_first(self.devices or []):
+            ip = getattr(dev, "ip", "") or ""
+            if not ip or ip in seen:
+                continue
+            seen.add(ip)
+            out.append(dev)
+        return out
+
     def _render_devices(self):
         self.tree.delete(*self.tree.get_children())
-        for index, dev in enumerate(policy.sort_oldest_first(self.devices)):
+        visible = self._visible_devices()
+        for index, dev in enumerate(visible):
             checked = "☑" if dev.ip in self.checked else "☐"
             if self.my_ip and dev.ip == self.my_ip:
                 tags = ("local",)
@@ -299,7 +417,7 @@ class App(object):
                 checked, dev.client_type_label, dev.os_name, dev.add_time,
                 dev.online_text(), dev.ip + suffix))
         self.section_label.configure(
-            text="在线设备（%d）" % len(self.devices))
+            text="在线设备（%d）" % len(visible))
         self.hint_label.configure(text="点击行最左侧勾选")
 
     def _on_tree_click(self, event):
@@ -317,7 +435,7 @@ class App(object):
         self.tree.set(item, "check", "☑" if item in self.checked else "☐")
 
     def _check_all(self):
-        self.checked = {d.ip for d in self.devices}
+        self.checked = {d.ip for d in self._visible_devices()}
         self._render_devices()
 
     def _check_none(self):
@@ -329,8 +447,15 @@ class App(object):
     # ------------------------------------------------------------------
     def refresh(self):
         if self._busy:
+            # 忙的时候不能静默丢弃：首次使用时"保存后刷新"正是在这里被丢掉的，
+            # 结果只能等那次早于保存发出的刷新来更新界面，一旦它出错就永久卡住
+            self._refresh_pending = True
+            self._status("正在查询，完成后自动刷新…")
             return
         self._set_busy(True, "正在查询…")
+        self._arm_watchdog()
+        self._refresh_seq += 1
+        seq = self._refresh_seq
 
         def work():
             state, status, devices = self.service.local_status()
@@ -344,36 +469,63 @@ class App(object):
             return state, status, devices
 
         def done(result):
-            state, status, devices = result
-            self.my_ip = status.ip
-            self.devices = devices
-            self.checked &= {d.ip for d in devices}
-            self._render_devices()
-            self._set_state(state)
-            bits = []
-            if self.my_ip:
-                bits.append("本机 IP %s" % self.my_ip)
-            if status.user_name:
-                bits.append("账号 %s" % status.user_name)
-            elif self.cfg.username:
-                bits.append("账号 %s" % self.cfg.username)
-            if status.device_total:
-                bits.append("在线设备 %s 台" % status.device_total)
-            if state == STATE_UNKNOWN and status.error:
-                bits.append("服务端返回：%s" % status.error)
-            self.detail_label.configure(text="　".join(bits) or "—")
-            self._set_busy(False, "已更新 %s" % _now())
+            message = "查询失败"
+            try:
+                if seq != self._refresh_seq:
+                    return          # 迟到的结果，已经超时作废
+                message = self._apply_refresh(*result)
+            except Exception as exc:
+                # 界面更新出错也绝不能把忙碌状态留在 True
+                self._on_ui_error(exc)
+                try:
+                    self._set_state(STATE_UNKNOWN)
+                    self.detail_label.configure(text="刷新失败：%s" % exc)
+                except Exception:
+                    pass
+            finally:
+                self._finish_refresh(message, seq)
 
         def fail(exc):
-            # 无论界面更新出什么岔子，都必须在最后把忙碌状态清掉，
-            # 否则用户会永远卡在"正在检测…"
             try:
+                if seq != self._refresh_seq:
+                    return
                 self._set_state(STATE_UNKNOWN)
                 self.detail_label.configure(text="查询失败：%s" % exc)
             finally:
-                self._set_busy(False, "查询失败")
+                self._finish_refresh("查询失败", seq)
 
         self.runner.submit(work, done, fail)
+
+    def _apply_refresh(self, state, status, devices):
+        """把查询结果落到界面上；返回状态栏文案。
+
+        渲染设备列表放在独立的 try 里：列表渲染失败只影响列表，
+        不能连带把状态文字和忙碌标记一起拖死（这就是"永久卡在正在检测…"的成因）。
+        """
+        self.my_ip = getattr(status, "ip", None)
+        self.devices = list(devices or [])
+        self.checked &= {d.ip for d in self.devices if getattr(d, "ip", "")}
+        try:
+            self._render_devices()
+        except Exception as exc:
+            if self.logger:
+                self.logger.exception("渲染设备列表失败: %s", exc)
+            self.section_label.configure(text="在线设备（列表渲染失败）")
+            self.hint_label.configure(text="设备列表无法显示，状态与登录仍可正常使用")
+        self._set_state(state)
+        bits = []
+        if self.my_ip:
+            bits.append("本机 IP %s" % self.my_ip)
+        if status.user_name:
+            bits.append("账号 %s" % status.user_name)
+        elif self.cfg.username:
+            bits.append("账号 %s" % self.cfg.username)
+        if status.device_total:
+            bits.append("在线设备 %s 台" % status.device_total)
+        if state == STATE_UNKNOWN and status.error:
+            bits.append("服务端返回：%s" % status.error)
+        self.detail_label.configure(text="　".join(bits) or "—")
+        return "已更新 %s" % _now()
 
     def action_login(self):
         if self._busy:
@@ -633,6 +785,7 @@ class App(object):
 
     def quit(self):
         self._closing = True
+        self._disarm_watchdog()
         self.runner.stop()
         if self.tray:
             self.tray.stop()

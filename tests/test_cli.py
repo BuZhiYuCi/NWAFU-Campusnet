@@ -113,7 +113,7 @@ def device_list():
 
 ONLINE_STATUS = models.OnlineStatus(
     online=True, error="ok",
-    raw={"error": "ok", "online_ip": "10.128.96.98", "user_name": "17782817252",
+    raw={"error": "ok", "online_ip": "10.128.96.98", "user_name": "20230000001",
          "user_mac": "08:8f:c3:e2:37:57", "online_device_total": "2"})
 
 
@@ -130,7 +130,7 @@ class CliTestBase(unittest.TestCase):
         os.environ.pop("CAMPUSNET_LOG_DIR", None)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def write_credentials(self, username="17782817252", password="pwd-1234"):
+    def write_credentials(self, username="20230000001", password="pwd-1234"):
         cfg = cli.cfgmod.Config(path=self.config_path, cipher=self.cipher)
         cfg.set_credentials(username, password)
         cfg.save()
@@ -250,9 +250,12 @@ class LoginTest(CliTestBase):
         self.write_credentials()
         ok = models.Result(kind=models.SUCCESS, raw={"ploy_msg": "E0000: ok"},
                            ip="10.128.96.98")
-        code, out, _ = self.run_cli(["login"], FakeClient(login_result=ok))
+        code, out, err = self.run_cli(["login"], FakeClient(login_result=ok))
         self.assertEqual(cli.EXIT_OK, code)
         self.assertIn("登录成功", out)
+        # D-14：登录成功时不能顺带打印"在线数已满需要腾位"
+        self.assertNotIn("腾位", err)
+        self.assertNotIn("腾位", out)
 
     def test_login_already_online_is_success(self):
         self.write_credentials()
@@ -344,7 +347,7 @@ class LogoutTest(CliTestBase):
     def test_logout_uses_configured_method(self):
         """默认用 dm（能真正下线）；配置里可以退回 portal。"""
         cfg = cli.cfgmod.Config(path=self.config_path, cipher=self.cipher)
-        cfg.set_credentials("17782817252", "pwd-1234")
+        cfg.set_credentials("20230000001", "pwd-1234")
         cfg.set("behavior.logout_method", "portal")
         cfg.save()
         res = models.Result(kind=models.SUCCESS, raw={},
@@ -377,12 +380,26 @@ class KickTest(CliTestBase):
 
     def test_kick_failure_returns_one(self):
         self.write_credentials()
-        res = models.Result(kind=models.NOT_ONLINE,
-                            raw={"error": "not_online_error"})
+        res = models.Result(kind=models.UNKNOWN,
+                            raw={"error": "sign_error"})
         code, _, err = self.run_cli(["kick", "10.1.1.1"],
                                     FakeClient(kick_result=res))
         self.assertEqual(cli.EXIT_FAIL, code)
         self.assertIn("失败", err)
+
+    def test_kick_not_online_counts_as_success(self):
+        """D-02：目标本来就不在线 = 目标状态已达成，必须算成功。
+
+        否则同一次操作 CLI 报失败、GUI（service 的腾位逻辑）报成功，
+        用户没法判断到底成没成。
+        """
+        self.write_credentials()
+        res = models.Result(kind=models.NOT_ONLINE,
+                            raw={"error": "not_online_error"})
+        code, out, err = self.run_cli(["kick", "10.1.1.1"],
+                                      FakeClient(kick_result=res))
+        self.assertEqual(cli.EXIT_OK, code)
+        self.assertIn("原本就不在线", out)
 
 
 class SettingsTest(CliTestBase):
@@ -416,6 +433,24 @@ class SettingsTest(CliTestBase):
         cfg = cli.cfgmod.Config(path=self.config_path, cipher=self.cipher).load()
         self.assertIsNone(cfg.get_password())
 
+    def test_username_change_does_not_silently_wipe_undecryptable_password(self):
+        """D-06b：密文解不开时只改账号，不能把密码悄悄清掉还报"已保存"。"""
+        self.write_credentials(username="old-user", password="pw-1234")
+
+        class Broken(FakeCipher):
+            def decrypt(self, token):
+                raise cli.cfgmod.DpapiError("模拟换机器后解不开")
+
+        self.cipher = Broken()
+        code, _, err = self.run_cli(["settings", "--username", "new-user"],
+                                    FakeClient())
+        self.assertEqual(cli.EXIT_FAIL, code)
+        self.assertIn("解不开", err)
+        cfg = cli.cfgmod.Config(path=self.config_path,
+                                cipher=FakeCipher()).load()
+        self.assertEqual("old-user", cfg.username, "失败时不应改动任何东西")
+        self.assertTrue(cfg.get("portal.password_dpapi"), "密文必须保留")
+
     def test_empty_password_rejected(self):
         code, _, err = self.run_cli(
             ["settings", "--username", "u", "--password", ""], FakeClient())
@@ -446,6 +481,25 @@ class AutostartTest(CliTestBase):
         self.assertEqual(cli.EXIT_OK, code)
         self.assertIn("未开启", out)
         self.assertIn("不会自动认证", out)
+
+    def test_off_reports_failure_when_registry_entry_survives(self):
+        """D-12：注册表项没删掉时不能打印"已关闭"。
+
+        用户会以为关掉了，实际下次开机照样自启，而且配置文件里还被写成 false。
+        """
+        code, _, _ = self.run_cli(["autostart", "on"], FakeClient())
+        self.assertEqual(cli.EXIT_OK, code)
+        cfg = cli.cfgmod.Config(path=self.config_path, cipher=self.cipher).load()
+        self.assertTrue(cfg.get("startup.autostart"))
+
+        cli.autostart.disable = lambda: False      # 删除失败，条目还在
+        code, out, err = self.run_cli(["autostart", "off"], FakeClient())
+        self.assertEqual(cli.EXIT_FAIL, code)
+        self.assertIn("关闭失败", err)
+        self.assertNotIn("已关闭开机自启", out)
+        cfg = cli.cfgmod.Config(path=self.config_path, cipher=self.cipher).load()
+        self.assertTrue(cfg.get("startup.autostart"),
+                        "失败时不能把配置写成已关闭")
 
     def test_on_then_status_then_off(self):
         code, out, _ = self.run_cli(["autostart", "on"], FakeClient())

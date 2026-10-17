@@ -91,9 +91,12 @@ class CampusNetService(object):
             self.logger.info("logout method=%s kind=%s state=%s",
                              self.logout_method(), res.kind,
                              res.detail.get("state"))
-        if res.kind == NOT_ONLINE:
+        # 必须先确认"真的下线了"再报成功：状态查不出来（限流/抖动）时
+        # 只知道服务端回了个 not_online，不代表在线名额已经释放（见 D-07）。
+        verified = bool(res.detail.get("verified"))
+        if verified and res.kind == NOT_ONLINE:
             return Outcome(True, NOT_ONLINE, "当前已经是离线状态", result=res)
-        if res.detail.get("verified"):
+        if verified:
             return Outcome(True, SUCCESS, "已下线，在线名额已释放", result=res)
         if res.detail.get("still_online"):
             return Outcome(False, "still_online",
@@ -148,8 +151,16 @@ class CampusNetService(object):
                                "本机 IP（%s）已被其它账号 %s 占用"
                                % (my_ip, status.user_name),
                                devices=devices, my_ip=my_ip)
-            return Outcome(True, ALREADY_ONLINE, "本机已经在线",
-                           devices=devices, my_ip=my_ip)
+            if status.user_name:
+                return Outcome(True, ALREADY_ONLINE, "本机已经在线",
+                               devices=devices, my_ip=my_ip)
+            # user_name 为空：这不是 rad_user_info 的原话，而是限流期间
+            # 用设备列表兜底合成出来的状态（raw.synthetic）。据此断言
+            # "已经在线"会让真正的登录被跳过，用户以为连上了其实没有（见 D-03）。
+            # 继续往下走，让服务端自己给结论（真在线会回 E2620 → ALREADY_ONLINE）。
+            if self.logger:
+                self.logger.info("state=online 但 user_name 缺失（synthetic=%s），"
+                                 "改为实际登录确认", status.raw.get("synthetic"))
 
         kicked = []
         result = None

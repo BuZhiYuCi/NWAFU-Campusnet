@@ -37,7 +37,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = os.path.join(ROOT, "docs")
 TESTS = os.path.join(ROOT, "tests")
 REPORT = os.path.join(DOCS, "phase0-report.md")
-STAGEA_JSON = os.path.join(TESTS, "stagea-result.json")
+# 探测结果里有真实学号、内网 IP 和 access_token，只能落在 .gitignore 覆盖的
+# 本地文件里；仓库中提交的是脱敏后的 tests/stagea-result.json（见 D-13）。
+STAGEA_JSON = os.path.join(TESTS, "stagea-result.local.json")
 
 BASE_URL = "http://172.26.8.11"
 DOMAIN_SUFFIX = "@yx-s-student"

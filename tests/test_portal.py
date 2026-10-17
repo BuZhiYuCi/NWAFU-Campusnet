@@ -24,7 +24,7 @@ LOGIN_ALREADY_ONLINE = (
     '"error":"ok","error_msg":"","online_ip":"10.128.96.98","real_name":"","remain_flux":0,'
     '"remain_times":0,"res":"ok","srun_ver":"SRunCGIAuthIntfSvr V1.18 B20210607",'
     '"suc_msg":"ip_already_online_error","sysver":"1.01.20210607",'
-    '"username":"17782817252","wallet_balance":0})'
+    '"username":"20230000001","wallet_balance":0})'
 )
 
 LOGIN_SUCCESS = (
@@ -52,15 +52,15 @@ USER_INFO_ONLINE = (
     'cb({"ServerFlag":4294967040,"add_time":1789488190,"billing_name":"中国电信校园用户",'
     '"domain":"yx-s-student","error":"ok","online_device_total":"2",'
     '"online_ip":"10.128.96.98","online_ip6":"2001:250:1002:6100::dd5c",'
-    '"user_mac":"08:8f:c3:e2:37:57","user_name":"17782817252"})'
+    '"user_mac":"08:8f:c3:e2:37:57","user_name":"20230000001"})'
 )
 
 DEVICE_LIST = (
     '{"code":0,"message":"Success","data":['
     '{"add_time":"2026-09-12 21:50:49","client_type":"1","ip":"10.111.147.127",'
-    '"os_name":"Windows 10","user_name":"17782817252"},'
+    '"os_name":"Windows 10","user_name":"20230000001"},'
     '{"add_time":"2026-09-16 00:03:10","client_type":"2","ip":"10.128.96.98",'
-    '"os_name":"Android 13","user_name":"17782817252"}]}'
+    '"os_name":"Android 13","user_name":"20230000001"}]}'
 )
 
 #: 不带 callback 时服务端返回的调试表单（Phase 0 实测）
@@ -127,7 +127,7 @@ class OnlineStatusTest(unittest.TestCase):
         status = models.OnlineStatus(online=raw["error"] == "ok", error=raw["error"], raw=raw)
         self.assertTrue(status.online)
         self.assertEqual("10.128.96.98", status.ip)
-        self.assertEqual("17782817252", status.user_name)
+        self.assertEqual("20230000001", status.user_name)
         self.assertEqual("2", status.device_total)
         self.assertTrue(status.is_me)
 

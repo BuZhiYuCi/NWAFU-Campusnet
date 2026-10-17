@@ -191,9 +191,12 @@ def cmd_status(args, ctx):
         err("✘ 访问不到认证门户 %s —— 当前可能不在校园网内。" % ctx.client.base_url)
         return EXIT_FAIL
     if state == STATE_UNKNOWN and status.rate_limited:
-        # 服务端提示"请稍后 10s 重试"，那就等一次再问，别让用户拿到模糊答案
-        out("服务端提示：%s" % (errors.message_for(status.raw) or status.error))
-        out("等 10 秒后重试一次…")
+        # 服务端提示"请稍后 10s 重试"，那就等一次再问，别让用户拿到模糊答案。
+        # 注意：--json 模式下 stdout 必须只有一段 JSON，诊断信息一律走 stderr，
+        # 否则脚本 json.loads 直接失败（见 D-01）。
+        note = err if args.json else out
+        note("服务端提示：%s" % (errors.message_for(status.raw) or status.error))
+        note("等 10 秒后重试一次…")
         time.sleep(10)
         state, status, devices = ctx.client.local_state(ctx.username or None, password)
     if password and not devices:
@@ -329,10 +332,16 @@ def _make_approve_callback(args, ctx):
     if sys.stdin is not None and sys.stdin.isatty():
         return lambda devices, preselected, my_ip: _interactive_choose(
             devices, preselected, my_ip, ctx)
-    err("提示：在线数已满需要腾位，但当前不是交互终端。")
-    err("      确认要下线哪台设备后，请加 --yes 让程序按策略自动腾位，")
-    err("      或先看看在线设备列表。")
-    return lambda devices, preselected, my_ip: []
+    # 注意：这几行提示必须放在回调**里面**。放在外面会在构造回调时就打印，
+    # 于是一次完全成功的登录也会附上"在线数已满需要腾位"的告警，
+    # 让用户以为要踢人（实测复现，见 D-14）。
+    def _decline(devices, preselected, my_ip):
+        err("提示：在线数已满需要腾位，但当前不是交互终端。")
+        err("      确认要下线哪台设备后，请加 --yes 让程序按策略自动腾位，")
+        err("      或先看看在线设备列表。")
+        return []
+
+    return _decline
 
 
 def _interactive_choose(devices, preselected, my_ip, ctx):
@@ -420,8 +429,12 @@ def cmd_kick(args, ctx):
         res = ctx.client.kick(ip, ctx.username)
         if ctx.logger:
             ctx.logger.info("kick ip=%s result=%s", ip, res.kind)
-        if res.ok:
-            out("✔ %s 已下线" % ip)
+        # NOT_ONLINE 说明目标本来就不在线，目标状态已经达成 —— 算成功。
+        # 这里必须和 service.py 里"腾位"的判定保持一致，否则同一次操作
+        # CLI 报失败、GUI 报成功，用户没法判断到底成没成（见 D-02）。
+        if res.ok or res.kind == NOT_ONLINE:
+            out("✔ %s 已下线%s" % (ip, "（原本就不在线）"
+                                    if res.kind == NOT_ONLINE else ""))
         else:
             failed += 1
             err("✘ %s 下线失败：%s" % (ip, res.message))
@@ -467,8 +480,19 @@ def cmd_settings(args, cfg):
         if password == "":
             err("✘ 密码不能为空；如要清除请用 --clear-password。")
             return EXIT_USAGE
-        cfg.set_credentials(username, password if password is not None
-                            else cfg.get_password())
+        keep = cfg.get_password()
+        if password is None:
+            # 只改账号、不提供密码时沿用旧密码。但"沿用"必须真的拿到明文：
+            # 密文存在却解不开（换了 Windows 账户 / 配置被拷到别的机器）时，
+            # 原来的 set_credentials(username, None) 会把密码清空还打印"已保存"，
+            # 用户的密码就这么没了（见 D-06b）。
+            if not keep and cfg.get("portal.password_dpapi"):
+                err("✘ 保存的密码解不开（通常是换了 Windows 账户，或配置文件被拷到了别的机器）。")
+                err("  为避免把密码悄悄清空，本次没有保存任何东西。")
+                err("  请重新输入密码：campusnet settings --password-stdin")
+                return EXIT_FAIL
+            password = keep
+        cfg.set_credentials(username, password)
         cfg.save()
         logmod.register_secret(password)
         out("✔ 已保存（账号 %s），下次运行直接生效。" % username)
@@ -528,10 +552,18 @@ def cmd_autostart(args, cfg):
             out("  注册的命令: %s" % command)
             out("  启动形态: %s" % ("静默（只留托盘）" if silent else "弹出主窗口"))
         elif action == "off":
-            autostart.disable()
+            removed = autostart.disable()
+            # 不能只看 disable() 的返回值就宣布成功：注册表项没删掉时
+            # 用户以为关了，实际下次开机照样自启（见 D-12）。
+            still = autostart.current_command()
+            if still:
+                err("✘ 关闭失败：开机自启项仍在注册表里（%s）" % still)
+                err("  请手动删除 HKCU\\%s 下的 %s"
+                    % (autostart.RUN_KEY, autostart.VALUE_NAME))
+                return EXIT_FAIL
             cfg.set("startup.autostart", False)
             cfg.save()
-            out("✔ 已关闭开机自启。")
+            out("✔ 已关闭开机自启。" if removed else "开机自启本来就是关闭状态。")
         else:
             command = autostart.current_command()
             out("开机自启：%s" % ("已开启" if command else "未开启"))
@@ -615,6 +647,14 @@ def main(argv=None, make_client=build_client, cipher=None):
         return EXIT_USAGE
 
     cfg = cfgmod.load_or_create(cipher=cipher)
+    if cfg.load_error:
+        # 配置读不动时不能装作没事：用户会以为"密码没了"，其实是文件坏了。
+        # 走 stderr，避免污染 --json 的 stdout。
+        err("⚠ 配置文件读不动：%s" % cfg.load_error)
+        if cfg.backup_path:
+            err("  原文件已备份到：%s" % cfg.backup_path)
+        err("  本次按默认设置启动；重新设置一次账号密码即可恢复"
+            "（campusnet settings）。")
     if args.command == "gui":
         if args.selftest:
             from .ui.app import run_selftest

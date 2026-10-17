@@ -18,6 +18,9 @@ SIGNATURE_ERROR = "signature_error"  # 签名/加密被拒
 UNPARSED = "unparsed"                # 响应无法解析（多半是被准入门户拦截）
 UNKNOWN = "unknown"                  # 其它业务错误
 NETWORK_ERROR = "network_error"      # 请求根本没发出去
+#: 服务端 5xx：请求到了，但服务器自己出错了。**不是**业务结论，
+#: 不能据此判断"登录失败/在线数已满"，应当重试或用轮询确认（见 D-11）。
+SERVER_ERROR = "server_error"
 
 # ---------------------------------------------------------------------------
 # 本机在线状态的三种取值（注意：与上面的"接口调用结果"常量是两回事）
@@ -44,6 +47,7 @@ _KIND_TEXT = {
     UNPARSED: "服务端返回无法解析（可能不在校园网内）",
     UNKNOWN: "操作失败",
     NETWORK_ERROR: "网络请求失败",
+    SERVER_ERROR: "服务端内部错误（5xx）",
 }
 
 #: 门户 client_type 字段含义（取自门户 lang.js）

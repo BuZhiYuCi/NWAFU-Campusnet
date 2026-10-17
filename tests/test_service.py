@@ -56,7 +56,7 @@ class ScriptClient(object):
             online=(self._state == STATE_ONLINE),
             error="ok" if self._state == STATE_ONLINE else "not_online_error",
             raw={"online_ip": self._my_ip,
-                 "user_name": "17782817252" if self._state == STATE_ONLINE else None})
+                 "user_name": "20230000001" if self._state == STATE_ONLINE else None})
         return self._state, status, list(self._devices)
 
     def online_devices(self, username, password, timeout=None):
@@ -80,7 +80,7 @@ class ScriptClient(object):
 
 def make_config(tmpdir, **behavior):
     cfg = Config(path=os.path.join(tmpdir, "config.json"), cipher=FakeCipher())
-    cfg.set_credentials("17782817252", "pwd-1234")
+    cfg.set_credentials("20230000001", "pwd-1234")
     for key, value in behavior.items():
         cfg.set("behavior." + key, value)
     return cfg
@@ -133,6 +133,24 @@ class LoginTest(unittest.TestCase):
         outcome = self.service(client).login()
         self.assertFalse(outcome.ok)
         self.assertEqual("ip_taken", outcome.kind)
+
+    def test_online_state_without_username_still_attempts_login(self):
+        """D-03：state=online 但拿不到 user_name 时不能直接报"已经在线"。
+
+        这种状态是限流期间用设备列表兜底合成出来的（raw.synthetic），
+        据此短路会让真正的登录被跳过——用户看到"已经在线"，实际并没有认证上。
+        """
+        client = ScriptClient([ok_result()])
+        client.local_state = lambda *a, **k: (
+            STATE_ONLINE,
+            OnlineStatus(online=True, error="ok",
+                         raw={"online_ip": "10.0.0.9", "user_name": None,
+                              "source": "device_list", "synthetic": True}),
+            [])
+        outcome = self.service(client).login()
+        self.assertEqual(1, client.login_calls, "应当真的去登录一次")
+        self.assertTrue(outcome.ok)
+        self.assertEqual(SUCCESS, outcome.kind)
 
     # -- 满员腾位 ------------------------------------------------------
     def test_full_then_kick_oldest_then_login_succeeds(self):
@@ -256,10 +274,21 @@ class LogoutServiceTest(unittest.TestCase):
         self.assertEqual(["dm"], client.calls)
 
     def test_already_offline(self):
-        client = self._Client(NOT_ONLINE, {})
+        client = self._Client(NOT_ONLINE, {"verified": True})
         outcome = CampusNetService(client, make_config(self.tmp), sleep=lambda s: None).logout()
         self.assertTrue(outcome.ok)
         self.assertEqual(NOT_ONLINE, outcome.kind)
+
+    def test_not_online_without_verification_is_not_success(self):
+        """D-07：服务端说 not_online，但状态没确认到离线 → 不能报"名额已释放"。
+
+        限流/网络抖动时状态查不出来，此时"没查到在线"不等于"确实下线了"。
+        报成功会让用户以为名额已经腾出来，实际可能还占着。
+        """
+        client = self._Client(NOT_ONLINE, {"verified": False})
+        outcome = CampusNetService(client, make_config(self.tmp), sleep=lambda s: None).logout()
+        self.assertFalse(outcome.ok)
+        self.assertIn("无法确认", outcome.message)
 
     def test_still_online_is_failure(self):
         client = self._Client(SUCCESS, {"verified": False, "still_online": True})

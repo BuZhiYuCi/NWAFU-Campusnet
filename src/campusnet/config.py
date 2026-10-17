@@ -13,6 +13,7 @@
 import copy
 import json
 import os
+import shutil
 from typing import Any, Dict, Optional
 
 from .dpapi import DpapiCipher, DpapiError, PlaintextCipher, default_cipher
@@ -107,6 +108,10 @@ class Config(object):
         self._cipher = cipher
         self.data = copy.deepcopy(DEFAULT_CONFIG)
         self.loaded = False
+        #: load() 失败的原因（None 表示没出错）；供上层提示用户
+        self.load_error = None
+        #: 损坏配置的备份路径；有值说明原文件读不动但已经抢救出来一份
+        self.backup_path = None
 
     # ------------------------------------------------------------------
     # 读写
@@ -124,6 +129,24 @@ class Config(object):
         self.data = self._migrate(_deep_merge(DEFAULT_CONFIG, raw))
         self.loaded = True
         return self
+
+    def backup_broken(self):
+        """把读不动的配置文件复制一份带时间戳的备份，返回备份路径。
+
+        为什么必须备份：load() 失败后 data 会退回默认值，下一次 save() 就会
+        把用户原来的文件整个覆盖掉——账号密码（密文）随之永久丢失，
+        而密文往往只是"换台机器解不开"，原文件本身仍有抢救价值（见 D-06a）。
+        """
+        if not os.path.exists(self.path):
+            return None
+        stamp = _now_stamp()
+        dest = "%s.broken-%s" % (self.path, stamp)
+        try:
+            shutil.copy2(self.path, dest)
+        except OSError:
+            return None
+        self.backup_path = dest
+        return dest
 
     def save(self):
         """原子写入：先写临时文件再替换，避免写一半损坏原配置。"""
@@ -233,11 +256,23 @@ class Config(object):
             "***" if self.get("portal.password_dpapi") else "-")
 
 
+def _now_stamp():
+    import datetime
+    return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
 def load_or_create(path=None, cipher=None):
-    """读取配置；不存在则创建一个空配置（不落盘，等用户设置账号后 save）。"""
+    """读取配置；不存在则创建一个空配置（不落盘，等用户设置账号后 save）。
+
+    文件存在但读不动（JSON 坏了 / 权限不足 / 编码不对）时**先备份再退回默认值**，
+    并把原因记在 ``cfg.load_error`` 上，让上层能明确提示用户，
+    而不是静默地把账号密码一起丢掉（见 D-06a）。
+    """
     cfg = Config(path=path, cipher=cipher)
     try:
         cfg.load()
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        cfg.load_error = "%s: %s" % (type(exc).__name__, exc)
+        cfg.backup_broken()
         cfg.data = copy.deepcopy(DEFAULT_CONFIG)
     return cfg

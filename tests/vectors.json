@@ -3,31 +3,31 @@
   "vectors": [
     {
       "token": "c436b50ea8065baf5e938b4a5c334cc374af9faf952a60aa27f31e647c402d12",
-      "username": "17782817252",
+      "username": "20230000001",
       "password": "Test-Pass-A1",
       "ip": "10.128.96.98",
       "acid": "1",
       "enc_ver": "srun_bx1",
-      "json": "{\"username\":\"17782817252\",\"password\":\"Test-Pass-A1\",\"ip\":\"10.128.96.98\",\"acid\":\"1\",\"enc_ver\":\"srun_bx1\"}",
-      "info": "{SRBX1}oMyigd5y2a8j5oBsmjFgMVEoYyfje3YYffNjIWiiMgaw8KRnOS2HvksoBigqYOEv78LJRdICLnCXzYoG3O+VRF7DDmpB3fGqBiGSA/QDQSDFcj2KjFMpVJ2kS0Zz0JjLbaqXGAFBg++0TN/R",
+      "json": "{\"username\":\"20230000001\",\"password\":\"Test-Pass-A1\",\"ip\":\"10.128.96.98\",\"acid\":\"1\",\"enc_ver\":\"srun_bx1\"}",
+      "info": "{SRBX1}Sk8+m7NjdXACTvbg/dzIPB68sRSuHd3NrcSScj/60bD0WyZkyN29uwOBFYkItubSZ8TmzZKWzHMPkBG9SORlTu/hWLbmjoAd9vEpoiWQ53c5Ux4iMjK/OGuP6Mgir9YffpRf1O9ciiyqle3n",
       "hmd5_hmac": "afd03a18b6a6beda278d4b7e5d0644a8",
       "hmd5_hmac_check": "afd03a18b6a6beda278d4b7e5d0644a8",
       "hmd5_concat": "01ca6926782ee25465ebd1cfa44eae59",
-      "chksum": "0adb2be88ed7726b97da15510a8b4354ce12ffce"
+      "chksum": "fd4ba21ffc76b55d19af25eaaeb09e65a01e68c5"
     },
     {
       "token": "0f8afd7ea13f9ec8dbbac4d68ff10f467578da86c77f2369b58b0fa5298a573b",
-      "username": "17782817252@yx-s-student",
+      "username": "20230000001@yx-s-student",
       "password": "unit-test-xyz",
       "ip": "10.111.147.127",
       "acid": "1",
       "enc_ver": "srun_bx1",
-      "json": "{\"username\":\"17782817252@yx-s-student\",\"password\":\"unit-test-xyz\",\"ip\":\"10.111.147.127\",\"acid\":\"1\",\"enc_ver\":\"srun_bx1\"}",
-      "info": "{SRBX1}fc/2vaCMZIk9GfJZkUM5rkiPXG7AK1YZ3L2g2Cqol3peoltYwa0OXsGGBwxkl7QTY2rHgXsJxxJ0NXN1sd58DUCzIyH45JCcwtcG5ozERzdkMZhQMZqvoKAH5PjVWcPZtKIfmOCmiUcdITqrdCPQwzdoer6pS9KjMi6bxS==",
+      "json": "{\"username\":\"20230000001@yx-s-student\",\"password\":\"unit-test-xyz\",\"ip\":\"10.111.147.127\",\"acid\":\"1\",\"enc_ver\":\"srun_bx1\"}",
+      "info": "{SRBX1}r1xYjchQegLd3DXv4bwQvJVEAzqFxpi/d0bMmDwk4LCU+HLoSVOuz7GMK70DCoxXP4jkljKLoyjTXmYnpTCzODLip3rhm++tivJbw/uBdK6Ke8W7lq5HPZV/4ZI2TfVCF0Xgzz1lo7A+BZxiQVZnv55n1klFPsR/smdk2S==",
       "hmd5_hmac": "739a969691a560780e10cce9ba519eaa",
       "hmd5_hmac_check": "739a969691a560780e10cce9ba519eaa",
       "hmd5_concat": "669acb5e264227b8ee879563aaa0befc",
-      "chksum": "52ffda625f9621796c720345d7f4745f81d30bc7"
+      "chksum": "a11dba486a864e697b93c2f3eb6d261d2c4abce7"
     },
     {
       "token": "shortToken123",

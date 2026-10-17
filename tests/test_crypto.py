@@ -76,10 +76,10 @@ class SignatureHelpersTest(unittest.TestCase):
         self.assertNotIn(".", t)
 
     def test_dm_signature_shape(self):
-        t, sign = crypto.dm_signature("17782817252", "10.0.0.1", now=1789488190)
+        t, sign = crypto.dm_signature("20230000001", "10.0.0.1", now=1789488190)
         self.assertEqual("1789488190", t)
         self.assertEqual(40, len(sign))
-        self.assertEqual(crypto.sha1_hex(t + "17782817252" + "10.0.0.1" + "1" + t),
+        self.assertEqual(crypto.sha1_hex(t + "20230000001" + "10.0.0.1" + "1" + t),
                          sign)
 
     def test_build_info_json_field_order(self):
