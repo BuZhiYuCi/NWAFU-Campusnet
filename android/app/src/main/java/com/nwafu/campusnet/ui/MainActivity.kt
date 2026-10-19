@@ -13,6 +13,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,10 +28,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -46,12 +47,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -67,22 +71,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nwafu.campusnet.R
 import com.nwafu.campusnet.data.AppSettings
 import com.nwafu.campusnet.portal.Device
 import com.nwafu.campusnet.portal.Policy
 import com.nwafu.campusnet.portal.STATE_OFFLINE
-
-private val CampusBlue = Color(0xFF0D47A1)
-private val CampusBlueLight = Color(0xFF1565C0)
-private val OkGreen = Color(0xFF2E7D32)
-private val WarnOrange = Color(0xFFEF6C00)
-private val MutedGrey = Color(0xFF6B7280)
 
 class MainActivity : ComponentActivity() {
 
@@ -106,7 +107,22 @@ class MainActivity : ComponentActivity() {
         notifGranted = hasNotificationPermission()
         requestNotificationPermission()
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = CampusBlue)) {
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Palette.Primary,
+                    onPrimary = Color.White,
+                    primaryContainer = Palette.PrimarySoft,
+                    onPrimaryContainer = Palette.PrimaryDark,
+                    background = Palette.Bg,
+                    onBackground = Palette.Text,
+                    surface = Palette.Card,
+                    onSurface = Palette.Text,
+                    surfaceVariant = Palette.CardSoft,
+                    onSurfaceVariant = Palette.Muted,
+                    outline = Palette.Border,
+                    error = Palette.Offline
+                )
+            ) {
                 val vm: MainViewModel = viewModel()
                 MainScreen(
                     vm = vm,
@@ -201,21 +217,47 @@ fun MainScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        containerColor = Palette.Bg,
+        snackbarHost = {
+            SnackbarHost(snackbar) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = Palette.PrimaryDark,
+                    contentColor = Color.White,
+                    shape = Radius.Button
+                )
+            }
+        },
         topBar = {
+            // 桌面端没有独立标题栏，标题用主色加深；这里同样不用色块压顶，
+            // 让整屏底色连成一片。
             TopAppBar(
-                title = { Text("校园网认证", fontWeight = FontWeight.SemiBold) },
+                title = {
+                    Text(
+                        "校园网认证",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = CampusBlue,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White
+                    containerColor = Palette.Bg,
+                    titleContentColor = Palette.PrimaryDark,
+                    actionIconContentColor = Palette.PrimaryDark
                 ),
                 actions = {
                     IconButton(onClick = { vm.refresh() }, enabled = !ui.busy) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "刷新",
+                            tint = if (ui.busy) Palette.Disabled else Palette.PrimaryDark
+                        )
                     }
                     IconButton(onClick = { showSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "设置",
+                            tint = Palette.PrimaryDark
+                        )
                     }
                 }
             )
@@ -225,19 +267,18 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 14.dp)
         ) {
             StatusCard(ui)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             ActionRow(ui, onLogin = vm::login, onLogout = { pendingLogout = true })
 
             if (!ui.onWifi) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 HintCard("当前未连接 Wi-Fi。校园网认证必须连着校园 Wi-Fi，否则请求会走移动数据。")
             }
-
             if (!notifGranted) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 ActionHintCard(
                     text = "通知权限未开启：后台守护仍在运行，但状态栏看不到常驻通知，" +
                         "掉线时也不会收到提示。",
@@ -246,36 +287,9 @@ fun MainScreen(
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "在线设备（${ui.devices.size}）",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (ui.devices.isEmpty() && !ui.busy) {
-                    Text("暂无", color = MutedGrey, fontSize = 13.sp)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(ui.devices, key = { it.ip }) { dev ->
-                    DeviceRow(
-                        device = dev,
-                        isLocal = dev.ip == ui.myIp,
-                        enabled = !ui.busy,
-                        onKick = { pendingKick = dev }
-                    )
-                }
-            }
+            Spacer(Modifier.height(14.dp))
+            DeviceCard(ui, Modifier.weight(1f), onKick = { pendingKick = it })
+            Spacer(Modifier.height(10.dp))
         }
     }
 
@@ -317,68 +331,96 @@ fun MainScreen(
     }
 }
 
+// ---------------------------------------------------------------------------
+// 状态卡：徽标 + 状态灯 + 大字状态 + 明细（对应桌面端 header）
+// ---------------------------------------------------------------------------
+
 @Composable
 private fun StatusCard(ui: UiState) {
     val accent = when {
-        ui.online -> OkGreen
-        ui.offline -> MutedGrey
-        ui.busy -> CampusBlueLight
-        else -> WarnOrange
+        !ui.configured -> Palette.Unknown
+        ui.busy -> Palette.Primary
+        else -> Palette.stateColor(ui.state)
     }
+    val stateText = when {
+        !ui.configured -> "未设置账号"
+        ui.busy -> ui.busyText.ifBlank { "正在检测…" }
+        else -> ui.statusText
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = Radius.Card,
+        colors = CardDefaults.cardColors(containerColor = Palette.Card),
+        border = BorderStroke(1.dp, Palette.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(10.dp)
-                        .background(accent, CircleShape)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (ui.busy) ui.busyText else ui.statusText,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = accent
-                )
-                if (ui.busy) {
-                    Spacer(Modifier.width(12.dp))
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(R.drawable.emblem_ui),
+                contentDescription = null,
+                modifier = Modifier.size(46.dp)
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(accent, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stateText,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (ui.configured) accent else Palette.Muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (ui.busy) {
+                        Spacer(Modifier.width(10.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(15.dp),
+                            color = accent,
+                            strokeWidth = 2.dp
+                        )
+                    }
                 }
-            }
-            Spacer(Modifier.height(10.dp))
-            HorizontalDivider(color = Color(0xFFEEEEEE))
-            Spacer(Modifier.height(10.dp))
-            InfoLine("本机 IP", ui.myIp ?: "-")
-            InfoLine("在线设备", "${ui.devices.size} 台")
-            if (!ui.configured) {
-                Spacer(Modifier.height(6.dp))
-                Text("尚未设置账号密码，点右上角齿轮配置。", color = WarnOrange, fontSize = 13.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    detailText(ui),
+                    fontSize = 12.sp,
+                    color = Palette.Muted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
-@Composable
-private fun InfoLine(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = MutedGrey, fontSize = 13.sp)
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    }
+/** 明细行：与桌面端 `detail_label` 的拼法一致（本机 IP / 账号 / 在线设备）。 */
+private fun detailText(ui: UiState): String {
+    if (!ui.configured) return "点右上角设置填写学号和密码"
+    val bits = mutableListOf<String>()
+    ui.myIp?.takeIf { it.isNotBlank() }?.let { bits += "本机 IP $it" }
+    ui.settings.username.takeIf { it.isNotBlank() }?.let { bits += "账号 $it" }
+    if (ui.devices.isNotEmpty()) bits += "在线设备 ${ui.devices.size} 台"
+    return bits.joinToString(" · ").ifEmpty { "—" }
 }
+
+// ---------------------------------------------------------------------------
+// 操作按钮：accent（实心绿）+ soft（淡绿底）两档，对应桌面端按钮风格
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         Button(
             onClick = onLogin,
             // 未连 Wi-Fi 时禁止认证：请求会走移动数据，源 IP 不是校园网 IP，
@@ -386,36 +428,214 @@ private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
             enabled = !ui.busy && ui.configured && ui.onWifi && !ui.online,
             modifier = Modifier
                 .weight(1f)
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp)
+                .height(46.dp),
+            shape = Radius.Button,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Palette.Primary,
+                contentColor = Color.White,
+                disabledContainerColor = Color(0xFFB8DEC5),
+                disabledContentColor = Color.White
+            ),
+            elevation = ButtonDefaults.buttonElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp,
+                disabledElevation = 0.dp
+            )
         ) {
-            Text("一键登录", fontSize = 16.sp)
+            Text("一键登录", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
-        OutlinedButton(
+
+        Button(
             onClick = onLogout,
             enabled = !ui.busy && ui.configured && ui.onWifi && ui.state != STATE_OFFLINE,
             modifier = Modifier
                 .weight(1f)
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828))
+                .height(46.dp),
+            shape = Radius.Button,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Palette.PrimarySoft,
+                contentColor = Palette.PrimaryDark,
+                disabledContainerColor = Palette.CardSoft,
+                disabledContentColor = Palette.Disabled
+            ),
+            elevation = ButtonDefaults.buttonElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp,
+                disabledElevation = 0.dp
+            )
         ) {
-            Text("下线", fontSize = 16.sp)
+            Text("一键下线", fontSize = 15.sp)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 设备卡：白卡 + 小标题 + 分隔线 + 斑马纹（对应桌面端 Treeview 卡片）
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun DeviceCard(ui: UiState, modifier: Modifier, onKick: (Device) -> Unit) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = Radius.Card,
+        colors = CardDefaults.cardColors(containerColor = Palette.Card),
+        border = BorderStroke(1.dp, Palette.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 11.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "在线设备（${ui.devices.size}）",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Palette.PrimaryDark
+            )
+            Text(
+                if (ui.devices.isEmpty()) "暂无" else "共 ${ui.devices.size} 台",
+                fontSize = 12.sp,
+                color = Palette.Muted
+            )
+        }
+        HorizontalDivider(color = Palette.Border)
+
+        if (ui.devices.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    if (ui.busy) "正在获取…" else "当前没有在线设备",
+                    fontSize = 13.sp,
+                    color = Palette.Muted
+                )
+            }
+        } else {
+            LazyColumn(Modifier.weight(1f)) {
+                itemsIndexed(ui.devices, key = { _, d -> d.ip }) { index, dev ->
+                    DeviceRow(
+                        device = dev,
+                        isLocal = dev.ip == ui.myIp,
+                        zebra = index % 2 == 1,
+                        enabled = !ui.busy,
+                        onKick = { onKick(dev) }
+                    )
+                    if (index != ui.devices.lastIndex) {
+                        HorizontalDivider(color = Palette.Border)
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
+private fun DeviceRow(
+    device: Device,
+    isLocal: Boolean,
+    zebra: Boolean,
+    enabled: Boolean,
+    onKick: () -> Unit
+) {
+    val bg = when {
+        isLocal -> Palette.PrimaryTint
+        zebra -> Palette.CardSoft
+        else -> Palette.Card
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    device.ip,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Palette.Text
+                )
+                if (isLocal) {
+                    Spacer(Modifier.width(6.dp))
+                    Badge("本机")
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(
+                "${device.clientTypeLabel} · ${device.osName.ifBlank { "未知系统" }}" +
+                    " · 已在线 ${device.onlineText()}",
+                fontSize = 12.sp,
+                color = Palette.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        // 本机不给"下线"入口：避免手滑把自己踢掉（桌面端同样只允许勾选他人）。
+        if (!isLocal) {
+            SoftChip("下线", enabled, onKick)
+        }
+    }
+}
+
+@Composable
+private fun Badge(text: String) {
+    Box(
+        modifier = Modifier
+            .background(Palette.PrimarySoft, Radius.Badge)
+            .padding(horizontal = 6.dp, vertical = 1.dp)
+    ) {
+        Text(text, fontSize = 10.sp, color = Palette.PrimaryDark, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun SoftChip(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = Radius.Chip,
+        color = if (enabled) Palette.PrimarySoft else Palette.CardSoft,
+        border = BorderStroke(1.dp, Palette.Border),
+        modifier = Modifier.height(32.dp)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text,
+                fontSize = 13.sp,
+                color = if (enabled) Palette.PrimaryDark else Palette.Disabled
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 提示卡
+// ---------------------------------------------------------------------------
+
+@Composable
 private fun HintCard(text: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = Palette.WarnBg),
+        shape = Radius.Card,
+        border = BorderStroke(1.dp, Palette.WarnBorder),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Text(
             text,
-            modifier = Modifier.padding(14.dp),
-            fontSize = 13.sp,
-            color = Color(0xFF8D6E63)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+            fontSize = 12.sp,
+            color = Palette.WarnText
         )
     }
 }
@@ -424,63 +644,30 @@ private fun HintCard(text: String) {
 @Composable
 private fun ActionHintCard(text: String, action: String, onAction: () -> Unit) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = Palette.WarnBg),
+        shape = Radius.Card,
+        border = BorderStroke(1.dp, Palette.WarnBorder),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 14.dp, bottom = 6.dp)) {
-            Text(text, fontSize = 13.sp, color = Color(0xFF8D6E63))
+        Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 11.dp, bottom = 4.dp)) {
+            Text(text, fontSize = 12.sp, color = Palette.WarnText)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onAction) {
-                    Text(action, fontSize = 13.sp, color = CampusBlue, fontWeight = FontWeight.Medium)
+                    Text(
+                        action,
+                        fontSize = 13.sp,
+                        color = Palette.PrimaryDark,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
     }
 }
 
-@Composable
-private fun DeviceRow(device: Device, isLocal: Boolean, enabled: Boolean, onKick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(device.ip, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    if (isLocal) {
-                        Spacer(Modifier.width(6.dp))
-                        Box(
-                            Modifier
-                                .background(Color(0xFFE3F2FD), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("本机", fontSize = 11.sp, color = CampusBlue)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    "${device.clientTypeLabel} · ${device.osName.ifBlank { "未知系统" }} · 已在线 ${device.onlineText()}",
-                    fontSize = 12.sp,
-                    color = MutedGrey
-                )
-            }
-            if (!isLocal) {
-                TextButton(onClick = onKick, enabled = enabled) {
-                    Text("下线", color = Color(0xFFC62828), fontSize = 13.sp)
-                }
-            }
-        }
-    }
-}
+// ---------------------------------------------------------------------------
+// 对话框
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun ConfirmDialog(
@@ -492,15 +679,19 @@ private fun ConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
+        containerColor = Palette.Card,
+        shape = Radius.Card,
+        title = {
+            Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
+        },
+        text = { Text(text, fontSize = 14.sp, color = Palette.Muted) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(confirmText, color = Color(0xFFC62828))
+                Text(confirmText, color = Palette.Offline, fontWeight = FontWeight.Medium)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text("取消", color = Palette.Muted) }
         }
     )
 }
@@ -520,9 +711,23 @@ private fun SettingsDialog(
     var autostart by remember { mutableStateOf(settings.autostart) }
     var autoLogin by remember { mutableStateOf(settings.autoLoginOnBoot) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = Palette.Primary,
+        unfocusedBorderColor = Palette.Border,
+        focusedLabelColor = Palette.PrimaryDark,
+        unfocusedLabelColor = Palette.Muted,
+        cursorColor = Palette.Primary,
+        focusedTextColor = Palette.Text,
+        unfocusedTextColor = Palette.Text
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("设置") },
+        containerColor = Palette.Card,
+        shape = Radius.Card,
+        title = {
+            Text("设置", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
+        },
         text = {
             Column(
                 Modifier
@@ -535,6 +740,8 @@ private fun SettingsDialog(
                     onValueChange = { baseUrl = it },
                     label = { Text("门户地址") },
                     singleLine = true,
+                    shape = Radius.Chip,
+                    colors = fieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -542,6 +749,8 @@ private fun SettingsDialog(
                     onValueChange = { acId = it },
                     label = { Text("ac_id") },
                     singleLine = true,
+                    shape = Radius.Chip,
+                    colors = fieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -549,26 +758,32 @@ private fun SettingsDialog(
                     onValueChange = { username = it },
                     label = { Text("学号 / 账号") },
                     singleLine = true,
+                    shape = Radius.Chip,
+                    colors = fieldColors,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text(if (settings.password.isNullOrEmpty()) "密码" else "密码（留空则不修改）") },
+                    label = {
+                        Text(if (settings.password.isNullOrEmpty()) "密码" else "密码（留空则不修改）")
+                    },
                     singleLine = true,
+                    shape = Radius.Chip,
+                    colors = fieldColors,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("下线方式", fontSize = 13.sp, color = MutedGrey)
+                SectionLabel("下线方式")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeChip("dm（推荐）", logoutMethod == "dm") { logoutMethod = "dm" }
                     ModeChip("portal", logoutMethod == "portal") { logoutMethod = "portal" }
                 }
 
-                Text("满员时预选哪台设备下线", fontSize = 13.sp, color = MutedGrey)
+                SectionLabel("满员时预选哪台设备下线")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeChip("最久的一台", kickMode == Policy.PRESELECT_OLDEST) {
                         kickMode = Policy.PRESELECT_OLDEST
@@ -587,21 +802,43 @@ private fun SettingsDialog(
                     password.ifEmpty { null },
                     kickMode, logoutMethod, autostart, autoLogin
                 )
-            }) { Text("保存") }
+            }) { Text("保存", color = Palette.PrimaryDark, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = Palette.Muted) }
+        }
+    )
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        fontSize = 12.sp,
+        color = Palette.PrimaryDark,
+        fontWeight = FontWeight.Medium
     )
 }
 
 @Composable
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    if (selected) {
-        Button(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
-            Text(label, fontSize = 13.sp)
-        }
-    } else {
-        OutlinedButton(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
-            Text(label, fontSize = 13.sp)
+    Surface(
+        onClick = onClick,
+        shape = Radius.Chip,
+        color = if (selected) Palette.Primary else Palette.PrimaryTint,
+        border = BorderStroke(1.dp, if (selected) Palette.Primary else Palette.Border),
+        modifier = Modifier.height(34.dp)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                label,
+                fontSize = 13.sp,
+                color = if (selected) Color.White else Palette.PrimaryDark,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+            )
         }
     }
 }
@@ -613,9 +850,18 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 14.sp)
-        Switch(checked = checked, onCheckedChange = onChange)
+        Text(label, fontSize = 14.sp, color = Palette.Text)
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Palette.Primary,
+                checkedBorderColor = Palette.Primary,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = Palette.Disabled,
+                uncheckedBorderColor = Palette.Disabled
+            )
+        )
     }
 }
-
-/** 用 [collectAsState] 直接订阅，无需额外依赖。 */

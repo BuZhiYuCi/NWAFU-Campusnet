@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+      与桌面端主题对齐：状态栏用主色加深（#2E8B50）+ 白色图标，
+      窗口底色用极淡的绿（#EEF7F0），避免启动瞬间闪一下白底。
+      导航栏留到 values-v27 里设置，因为 24~26 不支持浅色导航栏图标。
+    -->
     <style name="Theme.CampusNet" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#0D47A1</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
-        <item name="android:windowBackground">#F5F6F8</item>
+        <item name="android:statusBarColor">#2E8B50</item>
+        <item name="android:windowBackground">#EEF7F0</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

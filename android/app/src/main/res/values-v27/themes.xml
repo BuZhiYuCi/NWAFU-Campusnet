@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 27+ 才能把导航栏设成浅色并让图标转深，低版本保持系统默认。 -->
+    <style name="Theme.CampusNet" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#2E8B50</item>
+        <item name="android:windowBackground">#EEF7F0</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">#EEF7F0</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
