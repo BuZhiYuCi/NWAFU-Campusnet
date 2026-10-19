@@ -1,26 +1,49 @@
 # 校园网助手
 
-西北农林科技大学 深澜（SRun）校园网的一键登录 / 一键下线工具，Windows 平台。
+![version](https://img.shields.io/badge/version-1.0.0-3FB268)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Android-2E8B50)
+![android](https://img.shields.io/badge/Android-7.0%2B%20(API%2024)-3DDC84)
+![license](https://img.shields.io/badge/license-MIT-blue)
+
+西北农林科技大学 深澜（SRun）校园网的一键登录 / 一键下线工具，提供 Windows 桌面端与安卓端。
 
 解决的实际问题：学校限制同时在线设备数，而手动**断开 WiFi 或关机并不会自动释放名额**，且校园网登录页面的注销功能绕不开MAC免认证，无法真正下线，服务端会话会一直挂着（实测能挂 3 天以上）。想要真正腾出名额，必须调用门户的注销接口。
 
 本工具把这些操作变成一次点击，并且能自动完成"满员 → 踢掉一台 → 重新登录"。
 
-> **Android 客户端**：`android/` 目录是独立的安卓版（Kotlin + Jetpack Compose，
-> 包名 `com.nwafu.campusnet`）。协议实现与桌面版逐字节对齐，用同一套
-> `tests/vectors.json` 做跨语言校验。构建与设计说明见 [android/README.md](android/README.md)。
+---
+
+## 下载
+
+| 平台 | 文件 | 说明 |
+| --- | --- | --- |
+| Windows 10/11 x64 | [`CampusNet-1.0.0-win64.zip`][dl-win] | 解压后双击 `CampusNet.exe` |
+| Android 7.0+ | [`CampusNet-Android-1.0.0.apk`][dl-android] | 安装时需允许「安装未知来源应用」 |
+
+历史版本与完整变更记录见 [Releases][releases] 与 [CHANGELOG.md](CHANGELOG.md)。
+
+> 二进制不提交进 Git 历史（会让仓库体积永久膨胀），统一放在 Releases 附件里。
+> 打包与发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 
 ---
 
 ## 快速开始
 
-### 用打包好的程序
+### Windows 桌面端
 
-1. 双击 `CampusNet.exe`，主窗口出现。
+1. 解压 `CampusNet-1.0.0-win64.zip`，双击 `CampusNet.exe`，主窗口出现。
 2. 第一次运行会弹出设置，填入学号和密码，保存。
 3. 之后连好网线或 WiFi，点【一键登录】即可；点【一键下线】真正注销。
 
 命令行版（给脚本用）：`CampusNet-CLI.exe status`
+
+### Android
+
+1. 安装 `CampusNet-Android-1.0.0.apk`（首次需在系统里允许安装未知来源应用）。
+2. 打开后点右上角齿轮，填入门户地址、`ac_id`、学号、密码。
+3. 连着校园 Wi-Fi 时点【一键登录】。授予通知权限后，通知栏会常驻状态与快捷操作。
+
+安卓端的设计取舍与真机验证记录见 [android/README.md](android/README.md)。
 
 ### 从源码运行（开发）
 
@@ -31,6 +54,16 @@ python -m pip install -r requirements.txt
 .\campusnet.cmd status       # 看本机在线状态与在线设备
 .\campusnet.cmd settings     # 设置账号密码
 ```
+
+安卓端从源码构建：
+
+```bash
+cd android && ./gradlew assembleDebug
+```
+
+[dl-win]: https://github.com/BuZhiYuCi/NWAFU-Campusnet/releases/download/v1.0.0/CampusNet-1.0.0-win64.zip
+[dl-android]: https://github.com/BuZhiYuCi/NWAFU-Campusnet/releases/download/v1.0.0/CampusNet-Android-1.0.0.apk
+[releases]: https://github.com/BuZhiYuCi/NWAFU-Campusnet/releases
 
 ---
 

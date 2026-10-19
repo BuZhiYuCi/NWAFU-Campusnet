@@ -19,11 +19,13 @@ __pycache__/
 .venv/
 venv/
 
-# 打包产物
+# 打包产物（二进制走 GitHub Releases，不进 Git 历史，见 docs/RELEASING.md）
 build/
 dist/
+release-out/
 *.spec
 *.exe
+*.zip
 
 # Android
 android/.gradle/
@@ -31,5 +33,9 @@ android/.kotlin/
 android/local.properties
 android/app/release/
 android/app/debug/
+*.apk
+*.aab
+# 发布签名密钥：绝不能入库
+android/keystore.properties
 *.jks
 *.keystore

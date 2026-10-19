@@ -27,7 +27,11 @@ from .models import (ALREADY_ONLINE, FULL, NETWORK_ERROR, NOT_ONLINE,
 from .portal import (BASE_URL, HttpResponse, PortalError, PortalUnreachable,
                      SrunPortalClient, classify, parse_jsonp)
 
-__version__ = "0.1.0"
+#: 版本号（语义化版本 SemVer 2.0.0）。发布前必须与下列位置保持一致：
+#:   - android/app/build.gradle.kts 的 versionName / versionCode
+#:   - CHANGELOG.md 里新增的对应小节
+#: 用 `python tools/check_version.py` 一键核对。
+__version__ = "1.0.0"
 
 __all__ = [
     "BASE_URL", "SrunPortalClient", "PortalError", "PortalUnreachable",

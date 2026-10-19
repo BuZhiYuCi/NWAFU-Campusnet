@@ -1,8 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// 发布签名配置。keystore.properties 不入库（见 .gitignore），
+// 缺失时 release 构建产出未签名包，只可用于本地验证。
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseKey = keystoreProps.getProperty("storeFile") != null
 
 android {
     namespace = "com.nwafu.campusnet"
@@ -13,10 +25,23 @@ android {
         applicationId = "com.nwafu.campusnet"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
+        // versionCode 必须单调递增，公式：MAJOR*10000 + MINOR*100 + PATCH。
+        // 详见 docs/RELEASING.md，改完用 python tools/check_version.py 核对。
+        versionCode = 10000
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -26,6 +51,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
