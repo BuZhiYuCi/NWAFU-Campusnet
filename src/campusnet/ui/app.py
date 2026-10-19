@@ -19,6 +19,7 @@ from .. import autostart
 from ..models import (NOT_ONLINE, STATE_OFFLINE, STATE_ONLINE, STATE_UNKNOWN,
                       SUCCESS, UNKNOWN, OnlineStatus, Result)
 from ..portal import PortalError, PortalUnreachable, SrunPortalClient
+from .. import __version__
 from ..service import CampusNetService, Outcome
 from . import theme
 from .widgets import RoundedButton
@@ -131,7 +132,7 @@ class App(object):
         self._settings_dialog = None
 
         self.root = tk.Tk()
-        self.root.title("校园网助手")
+        self.root.title("校园网助手 " + __version__)
         self.root.geometry("820x600")
         self.root.minsize(720, 520)
         self.root.configure(bg=theme.BG)

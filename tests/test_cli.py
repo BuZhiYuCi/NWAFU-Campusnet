@@ -198,6 +198,16 @@ class ParserTest(unittest.TestCase):
         args = cli.build_parser().parse_args(["kick", "1.1.1.1", "2.2.2.2"])
         self.assertEqual(["1.1.1.1", "2.2.2.2"], args.ips)
 
+    def test_version_prints_package_version(self):
+        # 打包后的 exe 必须能自报版本，否则用户无法确认装的是哪一版。
+        import campusnet
+        out = io.StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                cli.build_parser().parse_args(["--version"])
+        self.assertEqual(0, ctx.exception.code)
+        self.assertIn(campusnet.__version__, out.getvalue())
+
     def _run(self, argv):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):

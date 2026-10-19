@@ -31,7 +31,7 @@ from .portal import (BASE_URL, HttpResponse, PortalError, PortalUnreachable,
 #:   - android/app/build.gradle.kts 的 versionName / versionCode
 #:   - CHANGELOG.md 里新增的对应小节
 #: 用 `python tools/check_version.py` 一键核对。
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "BASE_URL", "SrunPortalClient", "PortalError", "PortalUnreachable",

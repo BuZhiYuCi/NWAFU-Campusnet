@@ -83,16 +83,21 @@ CampusNet-Android-<版本>.apk       安卓端
 6. **真机/本机冒烟**
    - 桌面端：双击 `CampusNet.exe`，确认能检测状态、登录、下线
    - 安卓端：`adb install -r` 后确认状态检测与通知
-7. **提交并打 tag**
+7. **提交并打 tag**（`vX.Y.Z` 换成本次版本号）
    ```bash
-   git add -A && git commit -m "chore(release): v1.0.0"
-   git tag -a v1.0.0 -m "v1.0.0"
+   git add -A && git commit -m "chore(release): vX.Y.Z"
+   git tag -a vX.Y.Z -m "vX.Y.Z"
+   python tools/check_version.py --strict   # 必须通过
    git push origin main --tags
    ```
 8. **建 Release 并上传产物**
-   - 标题用 `v1.0.0`
+   - 标题用 `vX.Y.Z`
    - 正文直接取 CHANGELOG 里该版本的段落
-   - 附件：`CampusNet-1.0.0-win64.zip`、`CampusNet-Android-1.0.0.apk`
+   - 附件：`CampusNet-X.Y.Z-win64.zip`、`CampusNet-Android-X.Y.Z.apk`
+
+> **不要复用已发布的版本号。** 标签一旦推到远端就视为不可变：
+> 移动或删除已发布的 tag 会让下载链接和用户本地克隆失效。
+> 发错了就走下一个补丁版本，而不是改旧 tag。
 
 ## 安卓签名
 

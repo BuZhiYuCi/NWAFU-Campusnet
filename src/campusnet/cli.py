@@ -27,6 +27,7 @@ import sys
 import time
 import unicodedata
 
+from . import __version__
 from . import config as cfgmod
 from . import autostart
 from . import errors
@@ -592,6 +593,8 @@ def build_parser():
         description="校园网一键登录 / 一键下线（深澜 SRun 门户）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="退出码：0 成功 / 1 业务失败 / 2 参数或配置问题")
+    parser.add_argument("-V", "--version", action="version",
+                        version="campusnet " + __version__)
     sub = parser.add_subparsers(dest="command", metavar="<命令>")
 
     p = sub.add_parser("status", help="查看本机在线状态与在线设备")
