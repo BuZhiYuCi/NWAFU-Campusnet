@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  门户走的是明文 HTTP（http://172.26.8.11），Android 9+ 默认禁止 cleartext，
+  不放行的话所有请求都会直接失败。
+
+  这里全局放行是无奈之举：门户地址由用户配置，无法预先枚举域名。
+  App 自身只向「用户填写的那个地址」发请求，不会访问其他 HTTP 站点。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

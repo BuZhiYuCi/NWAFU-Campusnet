@@ -6,6 +6,10 @@
 
 本工具把这些操作变成一次点击，并且能自动完成"满员 → 踢掉一台 → 重新登录"。
 
+> **Android 客户端**：`android/` 目录是独立的安卓版（Kotlin + Jetpack Compose，
+> 包名 `com.nwafu.campusnet`）。协议实现与桌面版逐字节对齐，用同一套
+> `tests/vectors.json` 做跨语言校验。构建与设计说明见 [android/README.md](android/README.md)。
+
 ---
 
 ## 快速开始

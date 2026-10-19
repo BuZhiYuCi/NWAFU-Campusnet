@@ -1,0 +1,75 @@
+{
+  "source": "srun portal 2.00.20210607",
+  "vectors": [
+    {
+      "token": "c436b50ea8065baf5e938b4a5c334cc374af9faf952a60aa27f31e647c402d12",
+      "username": "20230000001",
+      "password": "Test-Pass-A1",
+      "ip": "10.128.96.98",
+      "acid": "1",
+      "enc_ver": "srun_bx1",
+      "json": "{\"username\":\"20230000001\",\"password\":\"Test-Pass-A1\",\"ip\":\"10.128.96.98\",\"acid\":\"1\",\"enc_ver\":\"srun_bx1\"}",
+      "info": "{SRBX1}Sk8+m7NjdXACTvbg/dzIPB68sRSuHd3NrcSScj/60bD0WyZkyN29uwOBFYkItubSZ8TmzZKWzHMPkBG9SORlTu/hWLbmjoAd9vEpoiWQ53c5Ux4iMjK/OGuP6Mgir9YffpRf1O9ciiyqle3n",
+      "hmd5_hmac": "afd03a18b6a6beda278d4b7e5d0644a8",
+      "hmd5_hmac_check": "afd03a18b6a6beda278d4b7e5d0644a8",
+      "hmd5_concat": "01ca6926782ee25465ebd1cfa44eae59",
+      "chksum": "fd4ba21ffc76b55d19af25eaaeb09e65a01e68c5"
+    },
+    {
+      "token": "0f8afd7ea13f9ec8dbbac4d68ff10f467578da86c77f2369b58b0fa5298a573b",
+      "username": "20230000001@yx-s-student",
+      "password": "unit-test-xyz",
+      "ip": "10.111.147.127",
+      "acid": "1",
+      "enc_ver": "srun_bx1",
+      "json": "{\"username\":\"20230000001@yx-s-student\",\"password\":\"unit-test-xyz\",\"ip\":\"10.111.147.127\",\"acid\":\"1\",\"enc_ver\":\"srun_bx1\"}",
+      "info": "{SRBX1}r1xYjchQegLd3DXv4bwQvJVEAzqFxpi/d0bMmDwk4LCU+HLoSVOuz7GMK70DCoxXP4jkljKLoyjTXmYnpTCzODLip3rhm++tivJbw/uBdK6Ke8W7lq5HPZV/4ZI2TfVCF0Xgzz1lo7A+BZxiQVZnv55n1klFPsR/smdk2S==",
+      "hmd5_hmac": "739a969691a560780e10cce9ba519eaa",
+      "hmd5_hmac_check": "739a969691a560780e10cce9ba519eaa",
+      "hmd5_concat": "669acb5e264227b8ee879563aaa0befc",
+      "chksum": "a11dba486a864e697b93c2f3eb6d261d2c4abce7"
+    },
+    {
+      "token": "shortToken123",
+      "username": "u2",
+      "password": "p2",
+      "ip": "10.0.0.1",
+      "acid": "2",
+      "enc_ver": "srun_bx1",
+      "json": "{\"username\":\"u2\",\"password\":\"p2\",\"ip\":\"10.0.0.1\",\"acid\":\"2\",\"enc_ver\":\"srun_bx1\"}",
+      "info": "{SRBX1}6/QZJ6yK8xcwhPLRiEDAbf62wbxckIqcuTK8J1PipynAmYxepBy8FuIjaM7kgxW61v0dada/rs6SSdd8e5M44iJeUE8Zsbcjb3yZFrojfGZkWko7XtVMqL==",
+      "hmd5_hmac": "1c4b2f8d3ab9d64c11debd1bd9400ad1",
+      "hmd5_hmac_check": "1c4b2f8d3ab9d64c11debd1bd9400ad1",
+      "hmd5_concat": "14ef25517ab2208f27c869e42246c476",
+      "chksum": "e9fefedc6b22c02b03ecdd381f32ae03f87da079"
+    },
+    {
+      "token": "B",
+      "username": "a",
+      "password": "b",
+      "ip": "1.2.3.4",
+      "acid": "1",
+      "enc_ver": "srun_bx1",
+      "json": "{\"username\":\"a\",\"password\":\"b\",\"ip\":\"1.2.3.4\",\"acid\":\"1\",\"enc_ver\":\"srun_bx1\"}",
+      "info": "{SRBX1}vO+UXScccyMd4ypVfEmpCa4zfizD1d4lOGKAcK0Wxk8bjhXj2Q+eY1N2qPnlLZwBZOBfGz0F9J8AbgQfg808ZnGpPZayM7DgMeaFGCvuMhWtArSW",
+      "hmd5_hmac": "82019b2adda13514681df3b922b61104",
+      "hmd5_hmac_check": "82019b2adda13514681df3b922b61104",
+      "hmd5_concat": "b22579efb106057e75e5bd7368962d09",
+      "chksum": "96294ba04b899bcb0f157a22d561570211d407f2"
+    },
+    {
+      "token": "1234567890abcdef",
+      "username": "abcdefg",
+      "password": "",
+      "ip": "10.9.8.7",
+      "acid": "10",
+      "enc_ver": "srun_bx1",
+      "json": "{\"username\":\"abcdefg\",\"password\":\"\",\"ip\":\"10.9.8.7\",\"acid\":\"10\",\"enc_ver\":\"srun_bx1\"}",
+      "info": "{SRBX1}RwyDrMk8AZ6ekTOuiHBj6mgfKcpPZMpZQw2R2FkTKlZU1WlTdvlw9HLzAAO6xrY9di4k14IXV0f3q8Cwevgl8Vn1+POaj1SfMN0xdc2A6YjAv6Zi6akmNktjpGH=",
+      "hmd5_hmac": "3b5b13a677b9c50d582539f584bb7e43",
+      "hmd5_hmac_check": "3b5b13a677b9c50d582539f584bb7e43",
+      "hmd5_concat": "996ce17f6abc9fe126b57aa5f1d8c92c",
+      "chksum": "582a41e85fc49daeb523b7530181ba5d4a210724"
+    }
+  ]
+}

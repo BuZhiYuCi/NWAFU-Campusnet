@@ -24,3 +24,12 @@ build/
 dist/
 *.spec
 *.exe
+
+# Android
+android/.gradle/
+android/.kotlin/
+android/local.properties
+android/app/release/
+android/app/debug/
+*.jks
+*.keystore
