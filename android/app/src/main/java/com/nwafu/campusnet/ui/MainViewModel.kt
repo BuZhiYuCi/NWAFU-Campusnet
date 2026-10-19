@@ -3,6 +3,7 @@ package com.nwafu.campusnet.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nwafu.campusnet.background.AuthForegroundService
 import com.nwafu.campusnet.data.AppSettings
 import com.nwafu.campusnet.data.ConfigRepository
 import com.nwafu.campusnet.net.NetworkBinder
@@ -47,15 +48,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** 忙碌期间收到的刷新请求，本轮结束后补跑一次（对应桌面版 D-00 的修复）。 */
     private var refreshPending = false
 
+    /** 前台服务只启动一次，避免每次配置变更都重复 startForeground。 */
+    private var serviceStarted = false
+
     init {
         viewModelScope.launch {
             repo.settings.collect { s ->
+                val configured = s.username.isNotBlank() && repo.hasPassword()
                 _ui.update {
                     it.copy(
                         settings = s,
-                        configured = s.username.isNotBlank() && repo.hasPassword(),
+                        configured = configured,
                         onWifi = NetworkBinder.isOnWifi(getApplication())
                     )
+                }
+                // 常驻通知（对应桌面版托盘）：配置好账号后拉起前台服务，
+                // 否则 App 退到后台就会被系统回收，开机自启也无从谈起。
+                if (configured && !serviceStarted) {
+                    serviceStarted = true
+                    AuthForegroundService.start(getApplication())
                 }
             }
         }
@@ -85,8 +96,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val result = withContext(Dispatchers.IO) {
                     NetworkBinder.bindToWifi(getApplication())
-                    SrunPortalClient(baseUrl = cfg.baseUrl, timeoutMs = 8000)
-                        .localState(cfg.username, cfg.password)
+                    val client = SrunPortalClient(baseUrl = cfg.baseUrl, timeoutMs = 8000)
+                    val triple = client.localState(cfg.username, cfg.password)
+                    // 协议层的 localState 在"确认在线"后直接返回空设备列表
+                    // （桌面版为省一次请求如此设计，CLI 会另外单独查设备）。
+                    // 界面必须展示列表，所以这里补一次查询。
+                    if (triple.first == STATE_ONLINE && triple.third.isEmpty()) {
+                        val devices = try {
+                            client.onlineDevices(cfg.username, cfg.password)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        Triple(triple.first, triple.second, devices)
+                    } else {
+                        triple
+                    }
                 }
                 state = result.first
                 val status = result.second

@@ -11,6 +11,7 @@ import com.nwafu.campusnet.portal.STATE_ONLINE
 import com.nwafu.campusnet.portal.STATE_UNKNOWN
 import com.nwafu.campusnet.portal.SUCCESS
 import com.nwafu.campusnet.portal.SrunPortalClient
+import com.nwafu.campusnet.portal.UNKNOWN
 import com.nwafu.campusnet.portal.UNPARSED
 import com.nwafu.campusnet.portal.classify
 import com.nwafu.campusnet.portal.parseJsonp
@@ -336,5 +337,41 @@ class PortalTest {
     @Test
     fun deviceUnknownClientType() {
         assertEquals("未知(99)", Device(ip = "x", clientType = "99").clientTypeLabel)
+    }
+
+    // ------------------------------------------------------------------
+    // 下线目标 IP 防御（D-19）：拿不到本机 IP 时绝不能发踢人请求
+    // ------------------------------------------------------------------
+
+    @Test
+    fun logoutRefusesWhenLocalIpIsBlank() {
+        // 服务端没回报 client_ip：常见于压根没连校园网、或网关异常。
+        // 此时若继续发 rad_user_dm，要么得到一条看不懂的失败，
+        // 要么（若代码里写了兜底 IP）误踢别人。
+        portal.jsonp("/cgi-bin/get_challenge", "{\"challenge\":\"abc123\",\"client_ip\":\"\"}")
+
+        val res = client().logoutLocal("20230000001", password = "pwd")
+
+        assertEquals(UNKNOWN, res.kind)
+        assertEquals(false, res.detail["verified"])
+        assertEquals("no_local_ip", res.detail["reason"])
+        assertEquals(0, portal.hits("/cgi-bin/rad_user_dm"))
+    }
+
+    @Test
+    fun logoutStillTargetsServerReportedIp() {
+        // 正常路径：client_ip 有值时必须原样作为 ip 参数发给 dm 接口，
+        // 不能改用配置里的地址或任何推测值。
+        portal.jsonp("/cgi-bin/get_challenge",
+            "{\"challenge\":\"abc123\",\"client_ip\":\"10.9.8.7\"}")
+        portal.jsonp("/cgi-bin/rad_user_dm", "{\"error\":\"ok\",\"ecode\":\"0\"}")
+        portal.json("/cgi-bin/rad_user_info", "{\"error\":\"not_online_error\"}")
+
+        client().logoutLocal("20230000001", password = "pwd")
+
+        val req = portal.requests.last { it.path == "/cgi-bin/rad_user_dm" }
+        assertEquals("10.9.8.7", req.params["ip"])
+        assertEquals("20230000001", req.params["username"])
+        assertEquals("1", req.params["unbind"])
     }
 }

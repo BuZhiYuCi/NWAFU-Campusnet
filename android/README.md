@@ -80,7 +80,7 @@ Android 9+ 默认禁止 cleartext HTTP，门户是 `http://`，不放行则所�
 # 1. 写 SDK 路径
 echo "sdk.dir=D:/SoftWare/AndroidSDK/Sdk" > android/local.properties
 
-# 2. 单元测试（45 条，含 5 组黄金向量）
+# 2. 单元测试（47 条，含 5 组黄金向量）
 gradle :app:testDebugUnitTest
 
 # 3. 打 debug APK
@@ -92,11 +92,11 @@ gradle :app:assembleDebug
 
 ## 测试
 
-`app/src/test/` 下 45 条 JVM 单元测试，**不发任何真实校园网请求**：
+`app/src/test/` 下 47 条 JVM 单元测试，**不发任何真实校园网请求**：
 
 - `CryptoTest`（14 条）：5 组黄金向量逐字节比对 `info` / `json` / `hmd5` / `chksum`，
   Base64 与 XXTEA 往返，dm 签名固定向量
-- `PortalTest`（31 条）：JSONP 解析（含 BOM、`try{}catch` 包裹、HTML 拦截）、
+- `PortalTest`（33 条）：JSONP 解析（含 BOM、`try{}catch` 包裹、HTML 拦截）、
   结果归类（E2620 vs E2621、not_online 家族、5xx）、三态判定、限流、登录参数、
   注销验证、设备列表
 
@@ -105,11 +105,31 @@ gradle :app:assembleDebug
 
 ## 已知限制
 
-1. **未做真机验证**：构建环境没有连接设备也没有模拟器。编译、单元测试、
-   APK 签名均已通过，但真实联网认证需要在手机上验证。
-2. **国产 ROM 自启动**：MIUI / EMUI / ColorOS 等默认拦截后台自启，
+1. **国产 ROM 自启动**：MIUI / EMUI / ColorOS 等默认拦截后台自启，
    用户需在系统「自启动管理」里手动放行，App 无法自行绕过。
-3. **XXTEA 对非 ASCII 有损**：门户 JS 用 `charCodeAt & 0xFF` 打包，这是协议本身的特性，
+2. **XXTEA 对非 ASCII 有损**：门户 JS 用 `charCodeAt & 0xFF` 打包，这是协议本身的特性，
    桌面版同样如此。登录载荷（学号/密码/IP/ac_id）全是 ASCII，实际不受影响。
-4. **`os` / `name` 字段**默认发 `Android`，桌面版发 `Windows 10`。
+3. **`os` / `name` 字段**默认发 `Android`，桌面版发 `Windows 10`。
    门户不校验这两个字段，但如果某校区有基于客户端的策略，需要改配置。
+4. **设备列表的 `client_type` 不可信**：门户按自己的 DHCP/MAC 指纹判定客户端类型，
+   与登录时上报的 `os`/`name` 无关。实测同一台手机在不同次认证后会被标成
+   「移动设备或其他 · Android」或「PC · Windows 10」。因此「本机」标记**必须**用
+   IP 与 `client_ip` 比对，不能依赖这个标签。
+5. **通知权限被关时后台仍工作但无感知**：前台服务不依赖通知权限也能运行，
+   但常驻通知不会显示。界面会给出提示并引导到系统设置（见下方 T-A07）。
+
+## 真机验证（vivo V2207A / Android 14 / SDK 34）
+
+| 项目 | 结果 |
+| --- | --- |
+| 安装 / 冷启动 | `Success`；`Displayed +1s95ms`，无 FATAL |
+| 状态检测 | 「已在线」，IP `10.110.96.109`，设备列表 2 台 |
+| 本机标记 | 按 IP 命中，正确标出「本机」 |
+| 一键登录 | 「已在线」，通知正文同步为 `已在线 · <IP>` |
+| 下线 | 确认弹窗 → 「未登录」，**且仅终止本机会话**（同时段电脑会话不受影响） |
+| `bindProcessToNetwork` | 手机默认路由切到移动数据后，App 仍能访问门户 → 绑定生效 |
+| 常驻通知 | 标题「校园网认证」、正文「已在线 · IP」、动作「下线」「刷新」均渲染 |
+| 通知「刷新」动作 | 触发真实请求（logcat `Posix_connect :80`）并重发通知 |
+| 前台服务 | `isForeground=true`，channel `campusnet_status`，`types=00000001` |
+| 通知权限被拒（T-A07） | 界面显示提示卡 +「去开启」，跳转到本应用通知设置页 |
+

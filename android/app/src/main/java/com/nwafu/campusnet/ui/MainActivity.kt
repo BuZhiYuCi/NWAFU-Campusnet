@@ -1,8 +1,18 @@
 package com.nwafu.campusnet.ui
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -75,20 +85,108 @@ private val WarnOrange = Color(0xFFEF6C00)
 private val MutedGrey = Color(0xFF6B7280)
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * 通知权限是否已授予。
+     * 权限被拒时前台服务依然能跑，但常驻通知完全不可见——用户会以为
+     * "后台没在守护"，所以必须在界面上把这件事说清楚（见 T-A07）。
+     */
+    private var notifGranted by mutableStateOf(true)
+
+    /** 是否已经弹过一次系统授权框。用来区分"从没问过"和"问过被永久拒绝"。 */
+    private var notifAsked = false
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            notifGranted = granted
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        notifGranted = hasNotificationPermission()
+        requestNotificationPermission()
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(primary = CampusBlue)) {
                 val vm: MainViewModel = viewModel()
-                MainScreen(vm)
+                MainScreen(
+                    vm = vm,
+                    notifGranted = notifGranted,
+                    onRequestNotification = { onNotifHintClick() }
+                )
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 用户可能刚从系统设置里改了通知开关，回到前台要重新读一次。
+        notifGranted = hasNotificationPermission()
+    }
+
+    /** 只看运行时权限本身（Android 13 以下恒为 true）。 */
+    private fun isRuntimePermissionGranted(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return ContextCompat.checkSelfPermission(
+            this, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /** 通知最终能不能显示：运行时权限 + 应用级"允许通知"总开关，两个都要过。 */
+    private fun hasNotificationPermission(): Boolean {
+        if (!isRuntimePermissionGranted()) return false
+        // 用户在系统设置里把"允许通知"总开关关掉时，权限本身仍是 granted，
+        // 但通知一条都不会显示。只查 checkSelfPermission 会漏判这种情况，
+        // 必须再问一次通知管理器（实测见 T-A07）。
+        return NotificationManagerCompat.from(this).areNotificationsEnabled()
+    }
+
+    /** Android 13+ 通知需要运行时授权，否则常驻通知不显示。 */
+    private fun requestNotificationPermission() {
+        if (isRuntimePermissionGranted()) return
+        notifAsked = true
+        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    /** 点击"去开启"：还能弹窗就弹窗，弹不出来才跳系统设置。 */
+    private fun onNotifHintClick() {
+        if (!isRuntimePermissionGranted()) {
+            val canPrompt = !notifAsked || ActivityCompat.shouldShowRequestPermissionRationale(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            )
+            if (canPrompt) {
+                notifAsked = true
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return
+            }
+        }
+        // 两种情况只能去设置：权限被"不再询问"永久拒绝，或权限还在但总开关被关。
+        openNotificationSettings()
+    }
+
+    /** 权限被"不再询问"后只能跳系统设置，这里直接落到本应用的通知页。 */
+    private fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(Uri.fromParts("package", packageName, null))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(vm: MainViewModel) {
+fun MainScreen(
+    vm: MainViewModel,
+    notifGranted: Boolean = true,
+    onRequestNotification: () -> Unit = {}
+) {
     val ui by vm.ui.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var showSettings by remember { mutableStateOf(false) }
@@ -136,6 +234,16 @@ fun MainScreen(vm: MainViewModel) {
             if (!ui.onWifi) {
                 Spacer(Modifier.height(12.dp))
                 HintCard("当前未连接 Wi-Fi。校园网认证必须连着校园 Wi-Fi，否则请求会走移动数据。")
+            }
+
+            if (!notifGranted) {
+                Spacer(Modifier.height(12.dp))
+                ActionHintCard(
+                    text = "通知权限未开启：后台守护仍在运行，但状态栏看不到常驻通知，" +
+                        "掉线时也不会收到提示。",
+                    action = "去开启",
+                    onAction = onRequestNotification
+                )
             }
 
             Spacer(Modifier.height(20.dp))
@@ -273,7 +381,9 @@ private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(
             onClick = onLogin,
-            enabled = !ui.busy && ui.configured && !ui.online,
+            // 未连 Wi-Fi 时禁止认证：请求会走移动数据，源 IP 不是校园网 IP，
+            // 结果要么失败，要么误操作到别人的会话上（实测踩过）。
+            enabled = !ui.busy && ui.configured && ui.onWifi && !ui.online,
             modifier = Modifier
                 .weight(1f)
                 .height(48.dp),
@@ -283,7 +393,7 @@ private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
         }
         OutlinedButton(
             onClick = onLogout,
-            enabled = !ui.busy && ui.configured && ui.state != STATE_OFFLINE,
+            enabled = !ui.busy && ui.configured && ui.onWifi && ui.state != STATE_OFFLINE,
             modifier = Modifier
                 .weight(1f)
                 .height(48.dp),
@@ -307,6 +417,24 @@ private fun HintCard(text: String) {
             fontSize = 13.sp,
             color = Color(0xFF8D6E63)
         )
+    }
+}
+
+/** 带一个跳转动作的提示卡：用于"通知权限没开"这类需要用户去处理的问题。 */
+@Composable
+private fun ActionHintCard(text: String, action: String, onAction: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 14.dp, bottom = 6.dp)) {
+            Text(text, fontSize = 13.sp, color = Color(0xFF8D6E63))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onAction) {
+                    Text(action, fontSize = 13.sp, color = CampusBlue, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
     }
 }
 

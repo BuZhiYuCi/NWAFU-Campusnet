@@ -435,7 +435,20 @@ class SrunPortalClient(
         timeoutMs: Int? = null,
         verifyTimeoutMs: Long = 8000
     ): PortalResult {
-        val targetIp = ip ?: localIp(username, timeoutMs)
+        val targetIp = (ip ?: localIp(username, timeoutMs)).trim()
+        // dm 接口是按 ip 定向踢人的。拿不到本机 IP 时如果继续发请求，
+        // 服务端只会回一条看不懂的失败，反而掩盖了"其实没连上校园网"这个真实原因；
+        // 更危险的是，任何"猜一个 IP 兜底"的写法都可能误踢别人（见 D-19）。
+        if (targetIp.isEmpty()) {
+            return PortalResult(
+                kind = UNKNOWN,
+                detail = mutableMapOf(
+                    "state" to STATE_UNKNOWN,
+                    "verified" to false,
+                    "reason" to "no_local_ip"
+                )
+            )
+        }
         val res = if (method == "portal") {
             logout(username, ip = targetIp, acId = acId, timeoutMs = timeoutMs)
         } else {
