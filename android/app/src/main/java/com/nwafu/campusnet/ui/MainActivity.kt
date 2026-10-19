@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -267,6 +265,7 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp)
         ) {
             StatusCard(ui)
@@ -288,8 +287,8 @@ fun MainScreen(
             }
 
             Spacer(Modifier.height(14.dp))
-            DeviceCard(ui, Modifier.weight(1f), onKick = { pendingKick = it })
-            Spacer(Modifier.height(10.dp))
+            DeviceCard(ui, onKick = { pendingKick = it })
+            Spacer(Modifier.height(16.dp))
         }
     }
 
@@ -388,27 +387,37 @@ private fun StatusCard(ui: UiState) {
                         )
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    detailText(ui),
-                    fontSize = 12.sp,
-                    color = Palette.Muted,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(Modifier.height(5.dp))
+                // 明细左边缘与状态文字对齐（状态行前面有 10dp 圆点 + 8dp 间距）。
+                // 桌面端是让明细跨圆点那两列，手机上看起来像没对齐，这里改成对齐。
+                Column(Modifier.padding(start = 18.dp)) {
+                    detailLines(ui).forEachIndexed { index, line ->
+                        if (index > 0) Spacer(Modifier.height(3.dp))
+                        Text(
+                            line,
+                            fontSize = 11.sp,
+                            color = Palette.Muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-/** 明细行：与桌面端 `detail_label` 的拼法一致（本机 IP / 账号 / 在线设备）。 */
-private fun detailText(ui: UiState): String {
-    if (!ui.configured) return "点右上角设置填写学号和密码"
-    val bits = mutableListOf<String>()
-    ui.myIp?.takeIf { it.isNotBlank() }?.let { bits += "本机 IP $it" }
-    ui.settings.username.takeIf { it.isNotBlank() }?.let { bits += "账号 $it" }
-    if (ui.devices.isNotEmpty()) bits += "在线设备 ${ui.devices.size} 台"
-    return bits.joinToString(" · ").ifEmpty { "—" }
+/**
+ * 明细行：桌面端把"本机 IP / 账号 / 在线设备"用全角空格拼成一行，
+ * 手机宽度放不下，硬拼会断在"账号"后面、把号码单独甩到第二行。
+ * 这里按段拆成多行，每行一个完整信息；设备数量在下方设备卡标题里已有，不再重复。
+ */
+private fun detailLines(ui: UiState): List<String> {
+    if (!ui.configured) return listOf("点右上角设置填写学号和密码")
+    val lines = mutableListOf<String>()
+    ui.myIp?.takeIf { it.isNotBlank() }?.let { lines += "本机 IP $it" }
+    ui.settings.username.takeIf { it.isNotBlank() }?.let { lines += "账号 $it" }
+    return lines.ifEmpty { listOf("—") }
 }
 
 // ---------------------------------------------------------------------------
@@ -433,8 +442,10 @@ private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
             colors = ButtonDefaults.buttonColors(
                 containerColor = Palette.Primary,
                 contentColor = Color.White,
-                disabledContainerColor = Color(0xFFB8DEC5),
-                disabledContentColor = Color.White
+                // 禁用态不能只是"变淡"：白字压在很浅的绿上会完全看不见。
+                // 这里换成灰绿底 + 灰绿字，既能看出是个禁用按钮，又读得清。
+                disabledContainerColor = Color(0xFFD3E9DD),
+                disabledContentColor = Color(0xFF63856F)
             ),
             elevation = ButtonDefaults.buttonElevation(
                 defaultElevation = 0.dp,
@@ -455,8 +466,8 @@ private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
             colors = ButtonDefaults.buttonColors(
                 containerColor = Palette.PrimarySoft,
                 contentColor = Palette.PrimaryDark,
-                disabledContainerColor = Palette.CardSoft,
-                disabledContentColor = Palette.Disabled
+                disabledContainerColor = Color(0xFFE6EFE9),
+                disabledContentColor = Color(0xFFA9BDB0)
             ),
             elevation = ButtonDefaults.buttonElevation(
                 defaultElevation = 0.dp,
@@ -464,7 +475,7 @@ private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
                 disabledElevation = 0.dp
             )
         ) {
-            Text("一键下线", fontSize = 15.sp)
+            Text("一键下线", fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -474,9 +485,9 @@ private fun ActionRow(ui: UiState, onLogin: () -> Unit, onLogout: () -> Unit) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun DeviceCard(ui: UiState, modifier: Modifier, onKick: (Device) -> Unit) {
+private fun DeviceCard(ui: UiState, onKick: (Device) -> Unit) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         shape = Radius.Card,
         colors = CardDefaults.cardColors(containerColor = Palette.Card),
         border = BorderStroke(1.dp, Palette.Border),
@@ -507,7 +518,7 @@ private fun DeviceCard(ui: UiState, modifier: Modifier, onKick: (Device) -> Unit
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .height(96.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -517,8 +528,10 @@ private fun DeviceCard(ui: UiState, modifier: Modifier, onKick: (Device) -> Unit
                 )
             }
         } else {
-            LazyColumn(Modifier.weight(1f)) {
-                itemsIndexed(ui.devices, key = { _, d -> d.ip }) { index, dev ->
+            // 设备数量通常个位数，用 Column 直接铺开即可：
+            // 这样卡片高度贴合内容，不会因为用 weight 撑满而拖出一大片空白。
+            Column {
+                ui.devices.forEachIndexed { index, dev ->
                     DeviceRow(
                         device = dev,
                         isLocal = dev.ip == ui.myIp,
@@ -552,7 +565,7 @@ private fun DeviceRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg)
-            .padding(horizontal = 16.dp, vertical = 11.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
@@ -568,7 +581,7 @@ private fun DeviceRow(
                     Badge("本机")
                 }
             }
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
                 "${device.clientTypeLabel} · ${device.osName.ifBlank { "未知系统" }}" +
                     " · 已在线 ${device.onlineText()}",
